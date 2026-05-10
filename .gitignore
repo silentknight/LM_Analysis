@@ -1,0 +1,15 @@
+*.html
+*.pyc
+*.so
+*.save
+*.save.*
+*.log
+*.tar
+main
+
+build/
+models/
+old/
+tests/
+dataset/
+experiments/
