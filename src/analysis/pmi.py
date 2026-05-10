@@ -1,16 +1,14 @@
 #!/usr/bin/env python
 
 import numpy as np
-import scipy.special as spec
-import sys
 import threading
 import os
-from . import speedup as lddCalc
+from . import lddcalc
 import array
 import scipy.sparse as sp
 
 
-class myThread(threading.Thread):
+class MyThread(threading.Thread):
 	def __init__(self, d, overlap, log_type, method, data_array, line_length_list, total_length):
 		self.d = d
 		self.Ni_X = 0
@@ -26,10 +24,10 @@ class myThread(threading.Thread):
 		self.data_array = data_array
 		self.line_length_list = line_length_list
 		self.total_length = total_length
-		super(myThread, self).__init__()
+		super(MyThread, self).__init__()
 
 	def run(self):
-		Ni_X, Ni_Y, Ni_XY, self.Xi, self.Yi = lddCalc.getJointRV(
+		Ni_X, Ni_Y, Ni_XY, self.Xi, self.Yi = lddcalc.getJointRV(
 			self.data_array, self.line_length_list, self.total_length, self.d, self.overlap)
 
 		if Ni_X is None:
@@ -47,7 +45,7 @@ class myThread(threading.Thread):
 			P_Y = np.zeros(int(self.Yi[-1]) + 1, dtype=np.float64)
 			P_Y[self.Yi] = Ni_Y / np.sum(Ni_Y)
 			P_XY = P_XY.tocoo()
-			pmi_data = lddCalc.getStandardPMI(
+			pmi_data = lddcalc.getStandardPMI(
 				P_XY.data, np.uint64(P_XY.row), np.uint64(P_XY.col),
 				P_X, P_Y,
 				np.uint64(P_XY.data.size), np.uint64(P_X.size), np.uint64(P_Y.size),
@@ -77,6 +75,10 @@ class PointwiseMutualInformation(object):
 		print("Average String Length: ", int(self.corpus.sequentialData.averageLength))
 		print("Total String Length: ", int(self.corpus.sequentialData.totalLength))
 
+		os.makedirs(os.path.join(self.directory, "marginals"), exist_ok=True)
+		os.makedirs(os.path.join(self.directory, "Ni_XY"), exist_ok=True)
+		os.makedirs(os.path.join(self.directory, "pmi"), exist_ok=True)
+
 		# Resume from last saved distance if the output directory already has results
 		try:
 			files = sorted(os.listdir(os.path.join(self.directory, "marginals")))
@@ -91,10 +93,6 @@ class PointwiseMutualInformation(object):
 			for word, idx in self.corpus.dictionary.word2idx.items():
 				f.write(f"{word},{idx}\n")
 
-		os.makedirs(os.path.join(self.directory, "marginals"), exist_ok=True)
-		os.makedirs(os.path.join(self.directory, "Ni_XY"), exist_ok=True)
-		os.makedirs(os.path.join(self.directory, "pmi"), exist_ok=True)
-
 		end = False
 		distances_computed = 0
 
@@ -104,7 +102,7 @@ class PointwiseMutualInformation(object):
 
 				thread = []
 				for i in range(self.no_of_threads):
-					thread.append(myThread(
+					thread.append(MyThread(
 						d + i, self.overlap, self.log_type, self.method,
 						self.data_array, self.line_length_list, self.total_length))
 

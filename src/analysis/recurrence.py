@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import numpy as np
-import threading
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -23,7 +22,8 @@ class Recurrence(object):
 
 		self.position_index = [np.empty(0, dtype=np.uint64)] * self.uniqueSize
 		for word_id, group in zip(unique_ids, groups):
-			self.position_index[word_id] = np.sort(group).astype(np.uint64)
+			if word_id < self.uniqueSize:
+				self.position_index[word_id] = np.sort(group).astype(np.uint64)
 
 		self.recurrenceList = self.getRecurrence()
 

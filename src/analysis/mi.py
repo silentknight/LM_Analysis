@@ -3,15 +3,14 @@
 import csv
 import numpy as np
 import scipy.special as spec
-import sys
 import threading
 import os
 import array
 import scipy.sparse
-from . import speedup
+from . import lddcalc
 
 
-class myThread(threading.Thread):
+class MyThread(threading.Thread):
 	def __init__(self, d, overlap, log_type, method, data_array, line_length_list, total_length):
 		self.d = d
 		self.mi = 0.0
@@ -25,10 +24,10 @@ class myThread(threading.Thread):
 		self.data_array = data_array
 		self.line_length_list = line_length_list
 		self.total_length = total_length
-		super(myThread, self).__init__()
+		super(MyThread, self).__init__()
 
 	def run(self):
-		Ni_X, Ni_Y, Ni_XY, u_X, u_Y = speedup.getJointRV(
+		Ni_X, Ni_Y, Ni_XY, u_X, u_Y = lddcalc.getJointRV(
 			self.data_array, self.line_length_list, self.total_length, self.d, self.overlap)
 
 		if Ni_X is None:
@@ -92,13 +91,21 @@ class MutualInformation(object):
 						next(reader)  # skip column header row
 						for row in reader:
 							if len(row) < 5:
+								print("Warning: skipping malformed row: " + str(row))
 								continue
 							try:
+								row_d = int(row[0])
+								# Pad any gaps to maintain positional invariant: mi[d-1] == value for d
+								while len(mi) < row_d - 1:
+									mi.append(float('nan'))
+									Hx.append(float('nan'))
+									Hy.append(float('nan'))
+									Hxy.append(float('nan'))
 								mi.append(float(row[1]))
 								Hx.append(float(row[2]))
 								Hy.append(float(row[3]))
 								Hxy.append(float(row[4]))
-								d = int(row[0]) + 1
+								d = row_d + 1
 							except (IndexError, ValueError):
 								print("Warning: skipping malformed row: " + str(row))
 				except StopIteration:
@@ -115,57 +122,55 @@ class MutualInformation(object):
 			w.writerow(["data", self.corpus.datainfo])
 			w.writerow(["d", "mi", "Hx", "Hy", "Hxy"])
 			for i in range(len(mi)):
-				w.writerow([i + 1, mi[i], Hx[i], Hy[i], Hxy[i]])
+				if not np.isnan(mi[i]):
+					w.writerow([i + 1, mi[i], Hx[i], Hy[i], Hxy[i]])
 		os.replace(tmp_path, self.filename)
 
-		f = open(self.filename, 'a', newline='')
+		with open(self.filename, 'a', newline='') as f:
+			try:
+				max_distance = self.total_length
+				while d < max_distance and d <= self.cutoff and not end:
+					# Pre-extend lists with placeholder zeros for this batch
+					mi.extend([0.0] * self.no_of_threads)
+					Hx.extend([0.0] * self.no_of_threads)
+					Hy.extend([0.0] * self.no_of_threads)
+					Hxy.extend([0.0] * self.no_of_threads)
 
-		try:
-			max_distance = self.total_length
-			while d < max_distance and d <= self.cutoff and not end:
-				# Pre-extend lists with placeholder zeros for this batch
-				mi.extend([0.0] * self.no_of_threads)
-				Hx.extend([0.0] * self.no_of_threads)
-				Hy.extend([0.0] * self.no_of_threads)
-				Hxy.extend([0.0] * self.no_of_threads)
+					thread = []
+					for i in range(self.no_of_threads):
+						thread.append(MyThread(
+							d + i, self.overlap, self.log_type, self.method,
+							self.data_array, self.line_length_list, self.total_length))
 
-				thread = []
-				for i in range(self.no_of_threads):
-					thread.append(myThread(
-						d + i, self.overlap, self.log_type, self.method,
-						self.data_array, self.line_length_list, self.total_length))
+					for i in range(self.no_of_threads):
+						thread[i].start()
 
-				for i in range(self.no_of_threads):
-					thread[i].start()
+					for i in range(self.no_of_threads):
+						thread[i].join()
 
-				for i in range(self.no_of_threads):
-					thread[i].join()
+					for i in range(self.no_of_threads):
+						if thread[i].complete or np.isnan(thread[i].mi):
+							end = True
+							# Trim trailing placeholder slots (O(1) list pop vs O(n) np.delete)
+							threads_remaining = self.no_of_threads - i
+							for _ in range(threads_remaining):
+								if mi and mi[-1] == 0.0:
+									del mi[-1]; del Hx[-1]; del Hy[-1]; del Hxy[-1]
+							break
 
-				for i in range(self.no_of_threads):
-					if thread[i].complete or np.isnan(thread[i].mi):
-						end = True
-						# Trim trailing placeholder slots (O(1) list pop vs O(n) np.delete)
-						threads_remaining = self.no_of_threads - i
-						for _ in range(threads_remaining):
-							if mi and mi[-1] == 0.0:
-								del mi[-1]; del Hx[-1]; del Hy[-1]; del Hxy[-1]
-						break
+						mi[d + i - 1] = thread[i].mi
+						Hx[d + i - 1] = thread[i].Hx
+						Hy[d + i - 1] = thread[i].Hy
+						Hxy[d + i - 1] = thread[i].Hxy
 
-					mi[d + i - 1] = thread[i].mi
-					Hx[d + i - 1] = thread[i].Hx
-					Hy[d + i - 1] = thread[i].Hy
-					Hxy[d + i - 1] = thread[i].Hxy
+						print(thread[i].d, thread[i].mi, thread[i].Hx, thread[i].Hy,
+						      thread[i].Hx + thread[i].Hy, thread[i].Hxy)
+						csv.writer(f).writerow(
+						    [d + i, mi[d + i - 1], Hx[d + i - 1], Hy[d + i - 1], Hxy[d + i - 1]])
 
-					print(thread[i].d, thread[i].mi, thread[i].Hx, thread[i].Hy,
-					      thread[i].Hx + thread[i].Hy, thread[i].Hxy)
-					csv.writer(f).writerow(
-					    [d + i, mi[d + i - 1], Hx[d + i - 1], Hy[d + i - 1], Hxy[d + i - 1]])
+					d += self.no_of_threads
 
-				d += self.no_of_threads
-
-		except KeyboardInterrupt:
-			print("Processed upto: " + str(d - 1))
-
-		f.close()
+			except KeyboardInterrupt:
+				print("Processed upto: " + str(d - 1))
 
 		return np.array(mi), np.array(Hx), np.array(Hy), np.array(Hxy)

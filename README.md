@@ -15,17 +15,30 @@ A toolkit for measuring complex system properties of language modeling datasets.
 
 ```
 .
-├── data.py          # Corpus loading and tokenization
-├── run_all.py       # Main pipeline entry point
-├── mi.py            # LDD / MI computation (threaded)
-├── pmi.py           # PMI computation (threaded)
-├── recurrence.py    # Recurrence analysis
-├── speedup.pyx      # Cython extension for fast joint RV computation
-├── setup.py         # Build script for Cython extension
-├── main.c           # C implementation of Heap's / Taylor's / Ebeling's laws
-├── validate.py      # Baseline validation tool
-├── experiments/     # Output directory (gitignored)
-└── baseline/        # Saved baselines for validation (gitignored)
+├── run_all.py           # Main pipeline entry point
+├── validate.py          # Baseline validation tool
+├── setup.py             # Build script for the Cython extension
+│
+└── src/
+    ├── data/            # Corpus loading and tokenization
+    │   └── loader.py
+    │
+    ├── analysis/        # Computation modules
+    │   ├── mi.py        # LDD / MI computation (threaded)
+    │   ├── pmi.py       # PMI computation (threaded)
+    │   ├── recurrence.py
+    │   ├── process_zipf.py  # Reorder Zipf arrays to match train word rank
+    │   ├── speedup.pyx  # Cython extension for fast joint RV computation
+    │   └── scaling_laws.c       # C implementation of Heap's / Taylor's / Ebeling's laws
+    │
+    └── plots/           # Visualisation and error estimation
+        ├── plot_all.py  # Plot all analysis types
+        ├── plot_utils.py
+        ├── datasets.py  # Dataset group configuration
+        └── estimate_zipf_error.py
+
+experiments/             # Output directory (gitignored)
+baseline/                # Saved baselines for validation (gitignored)
 ```
 
 ## Dependencies
@@ -47,7 +60,7 @@ python setup.py build_ext --inplace
 **2. Compile the C analysis binary** (done automatically by `run_all.py` if not present):
 
 ```bash
-gcc -O2 -o main main.c -lm
+gcc -O2 -o src/analysis/scaling_laws src/analysis/scaling_laws.c -lm
 ```
 
 ## Usage
@@ -66,7 +79,7 @@ python -u run_all.py --data dataset/ptb/.full \
 
 | Argument | Description | Default |
 |---|---|---|
-| `--data` | Dataset registry key (see `data.py`) | required |
+| `--data` | Path to corpus file (see `data/loader.py`) | required |
 | `--words` | Tokenize on words (`1`) or characters (`0`) | `0` |
 | `--cutoff` | Maximum distance *d* for MI / PMI computation | `1000` |
 | `--mi_method` | `grassberger` or `standard` | `grassberger` |
@@ -83,7 +96,7 @@ python -u run_all.py --data dataset/ptb/.full \
 # MI only
 python run_all.py --data dataset/ptb/.full --save_path ptb_full --processes mi
 
-# Heaps / Taylor's / Ebeling's only (auto-compiles main.c if needed)
+# Heaps / Taylor's / Ebeling's only (auto-compiles scaling_laws.c if needed)
 python run_all.py --data dataset/ptb/.full --save_path ptb_full --processes heaps
 ```
 

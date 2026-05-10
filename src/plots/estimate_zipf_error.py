@@ -1,5 +1,3 @@
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 """
 Fit a power law to ordered Zipf arrays and report MSE / MAE for each file.
 
@@ -9,9 +7,12 @@ fallback to 'arr_0'/'arr_1' for older files).
 Usage:
     python estimate_zipf_error.py --save_paths ptb_train ptb_ordered_test ptb_ordered_valid
 """
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import argparse
-import os
 
 import numpy as np
 import matplotlib.pyplot as plt

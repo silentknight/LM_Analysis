@@ -1,5 +1,3 @@
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 """
 Reorder test/valid Zipf arrays to match the train word frequency ranking.
 

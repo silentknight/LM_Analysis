@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 """
 Plot complex-system properties for language modelling datasets.
 
@@ -9,10 +7,13 @@ Examples:
     python plot_all.py --plots zipf ldds        # selected types
     python plot_all.py --plots taylors --subseq_length 500
 """
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import argparse
 import csv
-import os
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -146,7 +147,8 @@ def _plot_zipf(group, exp_dir, out_dir, **_):
                 amp, index, _ = fit_powerlaw(xdata, frequency, pinit=pinit, n_points=n_fit)
                 fit_ydata = powerlaw(xdata.astype(float), amp, index)
                 diff = fit_ydata - frequency.astype(float)
-                nmse = float(np.mean(diff ** 2) / (np.std(fit_ydata) * np.std(frequency)))
+                denom = np.std(fit_ydata) * np.std(frequency)
+                nmse = float(np.mean(diff ** 2) / denom) if denom != 0 else float('nan')
                 legend_label = f'{lbl} : α={round(index, 3)}, nmse={round(nmse, 3)}'
 
             ax.loglog(xdata, frequency, label=legend_label)

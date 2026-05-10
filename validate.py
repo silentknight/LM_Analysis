@@ -14,11 +14,11 @@ Check without re-running (compare existing outputs only):
 """
 
 import argparse
-import csv
 import os
+import sys
+import csv
 import shutil
 import subprocess
-import sys
 
 import numpy as np
 

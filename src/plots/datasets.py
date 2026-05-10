@@ -37,5 +37,4 @@ DATASETS = [
     ['wiki19Lwor_train', 'wiki19Lwor_test', 'wiki19Lwor_valid'],
     ['wiki103_train', 'wiki103_test', 'wiki103_valid'],
     ['wiki103C_train', 'wiki103C_test', 'wiki103C_valid'],
-    # ['wiki103R_train', 'wiki103R_test', 'wiki103R_valid'],
 ]

@@ -25,8 +25,9 @@ for _key in ('LDSHARED', 'BLDSHARED'):
     _cfg[_key] = ' '.join(_out)
 
 setup(
+    package_dir={'': 'src'},
     ext_modules=cythonize(
-        "analysis/speedup.pyx",
+        "src/analysis/lddcalc.pyx",
         annotate=True,
         compiler_directives={"language_level": "3"},
     ),

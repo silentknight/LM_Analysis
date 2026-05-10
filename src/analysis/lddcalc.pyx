@@ -46,8 +46,8 @@ cpdef getJointRV(dataArray, unsigned long[:] lineLengthList, int totalLength, in
 	Y_arr = np.asarray(Y, dtype=np.int64)
 	pair_ids = X_arr * max_y + Y_arr
 	unique_pairs, pair_counts = np.unique(pair_ids, return_counts=True)
-	pair_rows = (unique_pairs // max_y).astype(np.int32)
-	pair_cols = (unique_pairs % max_y).astype(np.int32)
+	pair_rows = (unique_pairs // max_y).astype(np.int64)
+	pair_cols = (unique_pairs % max_y).astype(np.int64)
 	XY = scipy.sparse.csc_matrix(
 		(pair_counts.astype(np.float64), (pair_rows, pair_cols)),
 		shape=(max_x, max_y))
@@ -86,22 +86,3 @@ cpdef getStandardPMI(P_XY_data, P_XY_row, P_XY_col, PX, PY,
 			temp_pmi[i] = log10(data[i] / denominator)
 
 	return pmi
-
-
-cpdef getTaylorsLaw(X_data, long l, long start, long end, long vocabularySize):
-
-	cdef unsigned int[:] data = X_data[start:end]
-	cdef long no_of_subsequences = X_data[start:end].shape[0]
-
-	results = None
-	for i in range(no_of_subsequences):
-		[unique, counts] = np.unique(data[i:i + l], return_counts=True)
-		entry = scipy.sparse.coo_matrix(
-			(counts, (np.ones(len(unique)) * i, unique)),
-			shape=(no_of_subsequences, vocabularySize + 1), dtype=np.int32).tocsc()
-		if results is None:
-			results = entry
-		else:
-			results += entry
-
-	return results

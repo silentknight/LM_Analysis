@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 
 import os
+import sys
 import argparse
 import subprocess
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
 
 import numpy as np
 
@@ -31,6 +34,10 @@ def main():
 	                    help='Output directory for PMI matrices (default: experiments/pmi/<save_path>)')
 
 	args = parser.parse_args()
+
+	from data.loader import _REGISTRY
+	if args.data not in _REGISTRY:
+		parser.error(f"Unknown data path '{args.data}'. Valid paths are listed in src/data/loader.py")
 
 	for d in ["experiments/datasetInIDs", "experiments/corpus", "experiments/zipf",
 	          "experiments/ldds", "experiments/heaps", "experiments/taylors",
@@ -89,17 +96,17 @@ def main():
 	###############################################################################
 
 	if 'heaps' in args.processes:
-		binary = 'analysis/main'
+		binary = 'src/analysis/scaling_laws'
 		if not os.path.exists(binary):
-			print("Compiling analysis/main.c ...")
-			result = subprocess.run(['gcc', '-O2', '-o', binary, 'analysis/main.c', '-lm'],
+			print("Compiling src/analysis/scaling_laws.c ...")
+			result = subprocess.run(['gcc', '-O2', '-o', binary, 'src/analysis/scaling_laws.c', '-lm'],
 			                        capture_output=True, text=True)
 			if result.returncode != 0:
 				print("Compilation failed:\n" + result.stderr)
 			else:
-				print("Compiled analysis/main.c")
+				print("Compiled src/analysis/scaling_laws.c")
 		if os.path.exists(binary):
-			subprocess.run([binary, args.save_path])
+			subprocess.run([binary, args.save_path, 'experiments'])
 			print("Heaps, Taylors, Ebelings Computed")
 
 	###############################################################################
