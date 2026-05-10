@@ -1,15 +1,39 @@
+# Compiled / build artifacts
 *.html
 *.pyc
 *.so
+*.c
+main
+run_script
+
+# Data / experiment outputs
 *.save
 *.save.*
 *.log
 *.tar
-main
+*.dat
+*.npz
+*.out
 
+# Directories
 build/
+dist/
 models/
 old/
 tests/
 dataset/
 experiments/
+__pycache__/
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment files
+.env
+
+# OS artifacts
+.DS_Store
+Thumbs.db
