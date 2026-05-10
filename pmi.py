@@ -38,8 +38,14 @@ class myThread(threading.Thread):
 
 		if self.method == "standard":
 			P_XY = Ni_XY / np.sum(Ni_XY)
-			P_X = (Ni_X / np.sum(Ni_X)).toarray()[0]
-			P_Y = (Ni_Y / np.sum(Ni_Y)).toarray()[0]
+			# getStandardPMI indexes px/py using raw vocab IDs (P_XY.row / P_XY.col),
+			# so P_X and P_Y must be vocab-ID-indexed arrays of length max_vocab_id+1.
+			# self.Xi / self.Yi are unique_X / unique_Y (sorted vocab IDs from getJointRV).
+			# Fancy indexing builds the correct layout without constructing sparse matrices.
+			P_X = np.zeros(int(self.Xi[-1]) + 1, dtype=np.float64)
+			P_X[self.Xi] = Ni_X / np.sum(Ni_X)
+			P_Y = np.zeros(int(self.Yi[-1]) + 1, dtype=np.float64)
+			P_Y[self.Yi] = Ni_Y / np.sum(Ni_Y)
 			P_XY = P_XY.tocoo()
 			pmi_data = lddCalc.getStandardPMI(
 				P_XY.data, np.uint64(P_XY.row), np.uint64(P_XY.col),
@@ -73,17 +79,19 @@ class PointwiseMutualInformation(object):
 
 		# Resume from last saved distance if the output directory already has results
 		try:
-			files = sorted(os.listdir(os.path.join(self.directory, "np")))
+			files = sorted(os.listdir(os.path.join(self.directory, "marginals")))
 			d_nums = [int(f.split('.')[0]) for f in files if f.endswith('.npz')]
 			if d_nums:
 				d = max(d_nums) + 1
 		except (FileNotFoundError, OSError, ValueError, IndexError):
 			print(self.directory + " does not exist or cannot be loaded; starting fresh.")
 
-		with open(os.path.join(self.directory, "0.symbols.dat"), "w") as f:
-			f.write(str(self.corpus.dictionary.word2idx))
+		with open(os.path.join(self.directory, "0.symbols.csv"), "w") as f:
+			f.write("word,id\n")
+			for word, idx in self.corpus.dictionary.word2idx.items():
+				f.write(f"{word},{idx}\n")
 
-		os.makedirs(os.path.join(self.directory, "np"), exist_ok=True)
+		os.makedirs(os.path.join(self.directory, "marginals"), exist_ok=True)
 		os.makedirs(os.path.join(self.directory, "Ni_XY"), exist_ok=True)
 		os.makedirs(os.path.join(self.directory, "pmi"), exist_ok=True)
 
@@ -111,8 +119,9 @@ class PointwiseMutualInformation(object):
 					if thread[i].complete:
 						end = True
 						break
-					np.savez(os.path.join(self.directory, "np", str(d + i)),
-					         thread[i].Xi, thread[i].Yi, thread[i].Ni_X, thread[i].Ni_Y)
+					np.savez_compressed(os.path.join(self.directory, "marginals", str(d + i)),
+					                    Xi=thread[i].Xi, Yi=thread[i].Yi,
+					                    Ni_X=thread[i].Ni_X, Ni_Y=thread[i].Ni_Y)
 					sp.save_npz(os.path.join(self.directory, "Ni_XY", str(d + i)), thread[i].Ni_XY)
 					sp.save_npz(os.path.join(self.directory, "pmi", str(d + i)), thread[i].pmi)
 					distances_computed += 1

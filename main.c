@@ -9,7 +9,7 @@
 int main(int argc, char *argv[]) {
 	FILE *fo, *fo1, *fi;
 	char text[200];
-	unsigned long long int i, j, k, temp_k, index=0, seqLength=0;
+	unsigned long long int i, j, k, temp_k, index=0, seqLength=0, w_lower, w_upper, weight;
 	unsigned long *wordIDSeq, *heaps, *subSeqLength, noOfSubSeq, *wordFreqList, vocabularySize=1;
 	double tempSum, *mean, *variance, *sd;
 	time_t old_time;
@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
 	// ---------------------------------------------------------------------------------------
 	// Read sequential data
 	// ---------------------------------------------------------------------------------------
-	snprintf (datasetFile, 100, "experiments/datasetInIDs/%s.out", argv[1]);
+	snprintf (datasetFile, 100, "experiments/datasetInIDs/%s.csv", argv[1]);
 	printf("%s\n", datasetFile);
 	fi = fopen(datasetFile, "r");
 	if(fi == NULL)
@@ -155,13 +155,17 @@ int main(int argc, char *argv[]) {
 			mean[k]=0;
 		}
 
-		// Compute mean
-		for(j=0; j<seqLength-i+1; j++)
+		// Compute mean: O(seqLength) weighted single-pass.
+		// Each corpus position k contributes to exactly
+		//   min(seqLength-i, k) - max(0, k-i+1) + 1  windows,
+		// so we accumulate that weight instead of iterating over every window.
+		// The original nested loop was O(seqLength * i) which dominated runtime.
+		for(k=0; k<seqLength; k++)
 		{
-			for(k=j; k<j+i; k++)
-			{
-				mean[wordIDSeq[k]]++;
-			}
+			w_lower = (k >= i - 1) ? (k - i + 1) : 0;
+			w_upper = (k <= seqLength - i) ? k : (seqLength - i);
+			weight = w_upper - w_lower + 1;
+			mean[wordIDSeq[k]] += (double)weight;
 		}
 
 		for(k=0; k<vocabularySize; k++)

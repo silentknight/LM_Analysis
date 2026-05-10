@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import csv
 import numpy as np
 import scipy.special as spec
 import sys
@@ -13,10 +14,10 @@ import speedup
 class myThread(threading.Thread):
 	def __init__(self, d, overlap, log_type, method, data_array, line_length_list, total_length):
 		self.d = d
-		self.mi = 0
-		self.Hx = 0
-		self.Hy = 0
-		self.Hxy = 0
+		self.mi = 0.0
+		self.Hx = 0.0
+		self.Hy = 0.0
+		self.Hxy = 0.0
 		self.complete = False
 		self.overlap = overlap
 		self.method = method
@@ -34,21 +35,27 @@ class myThread(threading.Thread):
 			self.complete = True
 			return
 
-		log = lambda val, base: np.log(val) if base == 0 else (np.log2(val) if base == 1 else np.log10(val))
-
-		Ni_X = Ni_X.data
-		Ni_Y = Ni_Y.data
+		# Ni_X and Ni_Y are dense float64 arrays from getJointRV;
+		# Ni_XY is a CSC sparse matrix — extract non-zero counts
 		Ni_XY = Ni_XY.data
 
+		log = lambda val, base: np.log(val) if base == 0 else (np.log2(val) if base == 1 else np.log10(val))
+
 		if self.method == "grassberger":
-			self.Hx = log(np.sum(Ni_X), self.log_type) - np.sum(Ni_X * spec.digamma(Ni_X)) / np.sum(Ni_X)
-			self.Hy = log(np.sum(Ni_Y), self.log_type) - np.sum(Ni_Y * spec.digamma(Ni_Y)) / np.sum(Ni_Y)
-			self.Hxy = log(np.sum(Ni_XY), self.log_type) - np.sum(Ni_XY * spec.digamma(Ni_XY)) / np.sum(Ni_XY)
+			sum_X = np.sum(Ni_X)
+			sum_Y = np.sum(Ni_Y)
+			sum_XY = np.sum(Ni_XY)
+			self.Hx = log(sum_X, self.log_type) - np.sum(Ni_X * spec.digamma(Ni_X)) / sum_X
+			self.Hy = log(sum_Y, self.log_type) - np.sum(Ni_Y * spec.digamma(Ni_Y)) / sum_Y
+			self.Hxy = log(sum_XY, self.log_type) - np.sum(Ni_XY * spec.digamma(Ni_XY)) / sum_XY
 			self.mi = self.Hx + self.Hy - self.Hxy
 		elif self.method == "standard":
-			self.Hx = -1 * np.sum(Ni_X / np.sum(Ni_X) * log(Ni_X / np.sum(Ni_X), self.log_type))
-			self.Hy = -1 * np.sum(Ni_Y / np.sum(Ni_Y) * log(Ni_Y / np.sum(Ni_Y), self.log_type))
-			self.Hxy = -1 * np.sum(Ni_XY / np.sum(Ni_XY) * log(Ni_XY / np.sum(Ni_XY), self.log_type))
+			px = Ni_X / np.sum(Ni_X)
+			py = Ni_Y / np.sum(Ni_Y)
+			pxy = Ni_XY / np.sum(Ni_XY)
+			self.Hx = -np.sum(px * log(px, self.log_type))
+			self.Hy = -np.sum(py * log(py, self.log_type))
+			self.Hxy = -np.sum(pxy * log(pxy, self.log_type))
 			self.mi = self.Hx + self.Hy - self.Hxy
 
 
@@ -67,10 +74,9 @@ class MutualInformation(object):
 		self.mutualInformation = self.calculate_MI()
 
 	def calculate_MI(self):
-		mi = np.zeros(0)
-		Hx = np.zeros(0)
-		Hy = np.zeros(0)
-		Hxy = np.zeros(0)
+		# Use Python lists for O(1) amortized append; convert to numpy at the end.
+		# np.append in a loop is O(n) per call → O(n²) over the full computation.
+		mi, Hx, Hy, Hxy = [], [], [], []
 		d = 1
 
 		print("Average String Length: ", int(self.corpus.sequentialData.averageLength))
@@ -78,28 +84,25 @@ class MutualInformation(object):
 
 		# Load previously computed distances if the file exists
 		if os.path.exists(self.filename):
-			with open(self.filename, "r") as f:
-				lines = f.readlines()
-
-			if lines:
-				temp = lines[0].split()
-				if len(temp) >= 2 and temp[0] == "data:" and temp[1] == self.corpus.datainfo:
-					for line in lines:
-						temp = line.strip().split(":")
-						if temp[0] == "d":
+			with open(self.filename, "r", newline='') as f:
+				reader = csv.reader(f)
+				try:
+					header = next(reader)
+					if len(header) >= 2 and header[0] == "data" and header[1] == self.corpus.datainfo:
+						next(reader)  # skip column header row
+						for row in reader:
+							if len(row) < 5:
+								continue
 							try:
-								temp1 = temp[2].split(",")
-								mi = np.append(mi, np.zeros(1))
-								mi[int(temp[1]) - 1] = float(temp1[0])
-								Hx = np.append(Hx, np.zeros(1))
-								Hx[int(temp[1]) - 1] = float(temp1[1])
-								Hy = np.append(Hy, np.zeros(1))
-								Hy[int(temp[1]) - 1] = float(temp1[2])
-								Hxy = np.append(Hxy, np.zeros(1))
-								Hxy[int(temp[1]) - 1] = float(temp1[3])
-								d = int(temp[1]) + 1
+								mi.append(float(row[1]))
+								Hx.append(float(row[2]))
+								Hy.append(float(row[3]))
+								Hxy.append(float(row[4]))
+								d = int(row[0]) + 1
 							except (IndexError, ValueError):
-								print("Warning: skipping malformed line: " + line.strip())
+								print("Warning: skipping malformed row: " + str(row))
+				except StopIteration:
+					pass
 		else:
 			print("File does not exist to load previous data")
 
@@ -107,22 +110,24 @@ class MutualInformation(object):
 
 		# Atomically rewrite existing data so the file is not left half-truncated on crash
 		tmp_path = self.filename + '.tmp'
-		with open(tmp_path, 'w') as f_tmp:
-			f_tmp.write("data: " + self.corpus.datainfo + "\n")
+		with open(tmp_path, 'w', newline='') as f_tmp:
+			w = csv.writer(f_tmp)
+			w.writerow(["data", self.corpus.datainfo])
+			w.writerow(["d", "mi", "Hx", "Hy", "Hxy"])
 			for i in range(len(mi)):
-				f_tmp.write("d:" + str(i + 1) + ":" + str(mi[i]) + "," +
-				            str(Hx[i]) + "," + str(Hy[i]) + "," + str(Hxy[i]) + "\n")
+				w.writerow([i + 1, mi[i], Hx[i], Hy[i], Hxy[i]])
 		os.replace(tmp_path, self.filename)
 
-		f = open(self.filename, 'a')
+		f = open(self.filename, 'a', newline='')
 
 		try:
 			max_distance = self.total_length
 			while d < max_distance and d <= self.cutoff and not end:
-				mi = np.append(mi, np.zeros(self.no_of_threads))
-				Hx = np.append(Hx, np.zeros(self.no_of_threads))
-				Hy = np.append(Hy, np.zeros(self.no_of_threads))
-				Hxy = np.append(Hxy, np.zeros(self.no_of_threads))
+				# Pre-extend lists with placeholder zeros for this batch
+				mi.extend([0.0] * self.no_of_threads)
+				Hx.extend([0.0] * self.no_of_threads)
+				Hy.extend([0.0] * self.no_of_threads)
+				Hxy.extend([0.0] * self.no_of_threads)
 
 				thread = []
 				for i in range(self.no_of_threads):
@@ -139,14 +144,11 @@ class MutualInformation(object):
 				for i in range(self.no_of_threads):
 					if thread[i].complete or np.isnan(thread[i].mi):
 						end = True
-						# Trim trailing zero slots for threads that did not compute
+						# Trim trailing placeholder slots (O(1) list pop vs O(n) np.delete)
 						threads_remaining = self.no_of_threads - i
 						for _ in range(threads_remaining):
-							if len(mi) > 0 and mi[-1] == 0:
-								mi = np.delete(mi, -1)
-								Hx = np.delete(Hx, -1)
-								Hy = np.delete(Hy, -1)
-								Hxy = np.delete(Hxy, -1)
+							if mi and mi[-1] == 0.0:
+								del mi[-1]; del Hx[-1]; del Hy[-1]; del Hxy[-1]
 						break
 
 					mi[d + i - 1] = thread[i].mi
@@ -156,9 +158,8 @@ class MutualInformation(object):
 
 					print(thread[i].d, thread[i].mi, thread[i].Hx, thread[i].Hy,
 					      thread[i].Hx + thread[i].Hy, thread[i].Hxy)
-					f.write("d:" + str(d + i) + ":" + str(mi[d + i - 1]) + "," +
-					        str(Hx[d + i - 1]) + "," + str(Hy[d + i - 1]) + "," +
-					        str(Hxy[d + i - 1]) + "\n")
+					csv.writer(f).writerow(
+					    [d + i, mi[d + i - 1], Hx[d + i - 1], Hy[d + i - 1], Hxy[d + i - 1]])
 
 				d += self.no_of_threads
 
@@ -167,4 +168,4 @@ class MutualInformation(object):
 
 		f.close()
 
-		return mi, Hx, Hy, Hxy
+		return np.array(mi), np.array(Hx), np.array(Hy), np.array(Hxy)

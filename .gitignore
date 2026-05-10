@@ -23,6 +23,7 @@ old/
 tests/
 dataset/
 experiments/
+baseline/
 __pycache__/
 *.egg-info/
 

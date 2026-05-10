@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 
-# System libs
 import os
 import argparse
+import subprocess
 
-# Installed libs
 import numpy as np
 
 import data
@@ -17,83 +16,103 @@ def main():
 	parser.add_argument('--data', type=str, required=True, help='location of the data corpus (e.g. dataset/wiki2/.full)')
 	parser.add_argument('--words', type=int, default=0, help="Tokenize strings on words or characters: 1 = Words, 0 = Characters")
 	parser.add_argument('--cutoff', type=int, default=1000, help="Value of maximum D you need.")
-	parser.add_argument('--mi_method', type=str, default="grassberger", help="MI calculation method, Choose standard = Standard Calculation, grassberger = Grassberger adjustments")
-	parser.add_argument('--log_type', type=int, default=1, help="Choose Log Type, 0 = Log to the base e, 1 = log to the base 2, 2 = log to the base 10")
+	parser.add_argument('--mi_method', type=str, default="grassberger", help="MI calculation method: standard or grassberger")
+	parser.add_argument('--log_type', type=int, default=1, help="Log base: 0=e, 1=2, 2=10")
 	parser.add_argument('--threads', type=int, default=1, help='Number of threads to spawn')
-	parser.add_argument('--overlap', type=int, default=1, help="Allow overlaps between two independent substrings. 0 = No, 1 = Yes")
+	parser.add_argument('--overlap', type=int, default=1, help="Allow overlaps between two independent substrings. 0=No, 1=Yes")
 	parser.add_argument('--granularity', type=int, default=1, help='How big is the spacing')
-	parser.add_argument('--clear', type=int, default=0, help="Clear old data file")
-	parser.add_argument('--save_path', type=str, default="save_data.dat", help="Save the data")
+	parser.add_argument('--clear', type=int, default=0, help="Clear old LDD data file: 0=No, 1=Yes")
+	parser.add_argument('--save_path', type=str, default="save_data", help="Base name for all output files")
+	parser.add_argument('--processes', nargs='+',
+	                    default=['mi', 'pmi', 'heaps', 'recurrence'],
+	                    choices=['mi', 'pmi', 'heaps', 'recurrence'],
+	                    help='Analyses to run (default: all). e.g. --processes mi pmi heaps')
+	parser.add_argument('--pmi_dir', type=str, default=None,
+	                    help='Output directory for PMI matrices (default: experiments/pmi/<save_path>)')
 
 	args = parser.parse_args()
 
-	###############################################################################
-	# Load data
-	###############################################################################
-
-	# Create output directories so the script is self-contained
 	for d in ["experiments/datasetInIDs", "experiments/corpus", "experiments/zipf",
 	          "experiments/ldds", "experiments/heaps", "experiments/taylors",
-	          "experiments/ebelings", "experiments/recurrence"]:
+	          "experiments/ebelings", "experiments/recurrence", "experiments/pmi"]:
 		os.makedirs(d, exist_ok=True)
 
-	corpus = data.Corpus(args.data, args.words)
-	np.savetxt("experiments/datasetInIDs/"+args.save_path+".out",
-	           np.asarray(corpus.sequentialData.dataArray, dtype=np.uint32),
-	           delimiter=',', fmt="%d")
+	###############################################################################
+	# Load data (always required as input to all analyses)
+	###############################################################################
 
+	corpus = data.Corpus(args.data, args.words)
+	np.savetxt("experiments/datasetInIDs/" + args.save_path + ".csv",
+	           np.asarray(corpus.sequentialData.dataArray, dtype=np.uint32),
+	           fmt="%d")
 	print("Corpus loaded")
 
 	###############################################################################
-	# Zipf's Law
+	# Zipf's Law (always computed — negligible cost)
 	###############################################################################
 
-	IDs = [i[0] for i in corpus.dictionary.counter.most_common()]
-	frequency = [i[1] for i in corpus.dictionary.counter.most_common()]
-
-	np.savez('experiments/zipf/'+args.save_path, np.asarray(IDs), np.asarray(frequency))
-
+	ranked = corpus.dictionary.counter.most_common()
+	IDs, frequency = zip(*ranked) if ranked else ([], [])
+	np.savez_compressed('experiments/zipf/' + args.save_path,
+	                    ids=np.asarray(IDs), frequency=np.asarray(frequency))
 	print("Zipf's Computed")
 
 	###############################################################################
-	# Long-range correlation
+	# Mutual Information / LDD
 	###############################################################################
 
-	save_path = 'experiments/ldds/'+args.save_path+".dat"
-
-	if args.clear == 1:
-		try:
-			os.remove(save_path)
-		except OSError:
-			print(save_path+" file does not exist.")
-	ldd = mi.MutualInformation(corpus, args.log_type, args.threads, save_path, args.overlap, args.mi_method, args.cutoff)
-
-	print("LDDs Computed")
+	if 'mi' in args.processes:
+		ldd_path = 'experiments/ldds/' + args.save_path + '.csv'
+		if args.clear == 1:
+			try:
+				os.remove(ldd_path)
+			except OSError:
+				print(ldd_path + " file does not exist.")
+		mi.MutualInformation(corpus, args.log_type, args.threads, ldd_path,
+		                     args.overlap, args.mi_method, args.cutoff)
+		print("LDDs Computed")
 
 	###############################################################################
-	# Heap's Law, Ebeling's Method, Taylor's Law
+	# Pointwise Mutual Information
 	###############################################################################
 
-	#subprocess.run(["./main", args.save_path], capture_output=True)
+	if 'pmi' in args.processes:
+		import pmi as pmi_mod
+		pmi_dir = args.pmi_dir or os.path.join("experiments/pmi", args.save_path)
+		os.makedirs(pmi_dir, exist_ok=True)
+		pmi_mod.PointwiseMutualInformation(corpus, args.log_type, args.threads,
+		                                   pmi_dir, args.overlap, "standard", args.cutoff)
+		print("PMI Computed")
 
-	#print("Heaps, Ebelings, Taylor Computed")
+	###############################################################################
+	# Heap's Law, Taylor's Law, Ebeling's Method  (C binary)
+	###############################################################################
+
+	if 'heaps' in args.processes:
+		if not os.path.exists('./main'):
+			print("Compiling main.c ...")
+			result = subprocess.run(['gcc', '-O2', '-o', 'main', 'main.c', '-lm'],
+			                        capture_output=True, text=True)
+			if result.returncode != 0:
+				print("Compilation failed:\n" + result.stderr)
+			else:
+				print("Compiled main.c")
+		if os.path.exists('./main'):
+			subprocess.run(['./main', args.save_path])
+			print("Heaps, Taylors, Ebelings Computed")
 
 	###############################################################################
 	# Recurrence
 	###############################################################################
 
-	# recur = recurrence.Recurrence(corpus, 10)
+	if 'recurrence' in args.processes:
+		import recurrence as rec_mod
+		recur = rec_mod.Recurrence(corpus, args.threads)
+		rec_path = 'experiments/recurrence/' + args.save_path + '.npz'
+		np.savez_compressed(rec_path, **{str(k): v for k, v in recur.recurrenceList.items()})
+		print("Recurrence Computed")
 
-	# save_path = 'experiments/recurrence/'+args.save_path+".dat"
 
-	# try:
-	# 	recur_file = open(save_path, 'wb')
-	# 	pickle.dump(recur.recurrenceList, recur_file)
-	# 	recur_file.close()
-	# except:
-	#     print("Something went wrong")
-
-	# print("Recurrence Computed")
 
 if __name__ == '__main__':
-		main()
+	main()

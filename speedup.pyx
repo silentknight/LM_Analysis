@@ -36,19 +36,25 @@ cpdef getJointRV(dataArray, unsigned long[:] lineLengthList, int totalLength, in
 	unique_X, counts_X = np.unique(X, return_counts=True)
 	unique_Y, counts_Y = np.unique(Y, return_counts=True)
 
-	counts_X = scipy.sparse.coo_matrix(
-		(counts_X, (np.zeros(len(unique_X)), unique_X)),
-		shape=(1, int(max(unique_X)) + 1), dtype=np.float64).tocsc()
-	counts_Y = scipy.sparse.coo_matrix(
-		(counts_Y, (np.zeros(len(unique_Y)), unique_Y)),
-		shape=(1, int(max(unique_Y)) + 1), dtype=np.float64).tocsc()
+	# unique arrays from np.unique are sorted, so [-1] gives max in O(1) vs max() O(n)
+	cdef unsigned long max_x = int(unique_X[-1]) + 1
+	cdef unsigned long max_y = int(unique_Y[-1]) + 1
 
-	temp_sp = scipy.sparse.coo_matrix(
-		(np.ones(len(X)), (np.asarray(X), np.asarray(Y))),
-		shape=(max(X) + 1, max(Y) + 1), dtype=np.float64)
-	XY = temp_sp.tocsc()
+	# Pre-count XY pairs via integer pair-encoding + np.unique, avoiding an O(N)
+	# array of ones and letting numpy handle deduplication before building the matrix
+	X_arr = np.asarray(X, dtype=np.int64)
+	Y_arr = np.asarray(Y, dtype=np.int64)
+	pair_ids = X_arr * max_y + Y_arr
+	unique_pairs, pair_counts = np.unique(pair_ids, return_counts=True)
+	pair_rows = (unique_pairs // max_y).astype(np.int32)
+	pair_cols = (unique_pairs % max_y).astype(np.int32)
+	XY = scipy.sparse.csc_matrix(
+		(pair_counts.astype(np.float64), (pair_rows, pair_cols)),
+		shape=(max_x, max_y))
 
-	return counts_X, counts_Y, XY, unique_X, unique_Y
+	# Return dense float64 arrays for Ni_X / Ni_Y — callers previously wrapped these
+	# in 1-row sparse matrices only to extract .data immediately afterwards
+	return counts_X.astype(np.float64), counts_Y.astype(np.float64), XY, unique_X, unique_Y
 
 
 cpdef getStandardPMI(P_XY_data, P_XY_row, P_XY_col, PX, PY,
