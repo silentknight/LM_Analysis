@@ -1,12 +1,175 @@
 #!/usr/bin/env python
 
-# System libs
 import os
 import sys
 from collections import Counter
-import simplejson as json
-import gzip
-import pickle
+
+
+# Registry: path_key → (label, is_subdir, [(attr, filename), ...])
+# is_subdir=True  → base = key.rsplit('.', 1)[0]; files resolved relative to base
+# is_subdir=False → file is the key itself; attr is the destination attribute name
+_REGISTRY = {
+	# Penn Tree Bank
+	"dataset/ptb/.full":  ("Penn Tree Bank Full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/ptb/.train": ("Penn Tree Bank Train", True, [("train","train")]),
+	"dataset/ptb/.valid": ("Penn Tree Bank Valid", True, [("valid","valid")]),
+	"dataset/ptb/.test":  ("Penn Tree Bank Test",  True, [("test","test")]),
+
+	# wikitext-2
+	"dataset/wiki2/.full":  ("wikitext-2 full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/wiki2/.train": ("wikitext-2 train", True, [("train","train")]),
+	"dataset/wiki2/.valid": ("wikitext-2 valid", True, [("valid","valid")]),
+	"dataset/wiki2/.test":  ("wikitext-2 test",  True, [("test","test")]),
+
+	# wikitext-2 raw
+	"dataset/wiki2R/.full":  ("wikitext-2 raw full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/wiki2R/.train": ("wikitext-2 raw train", True, [("train","train")]),
+	"dataset/wiki2R/.valid": ("wikitext-2 raw valid", True, [("valid","valid")]),
+	"dataset/wiki2R/.test":  ("wikitext-2 raw test",  True, [("test","test")]),
+
+	# wikitext-2 cleaned
+	"dataset/wiki2C/.full":   ("wikitext-2 cleaned full",   True, [("train","trainC"), ("valid","validC"), ("test","testC")]),
+	"dataset/wiki2C/.test":   ("wikitext-2 cleaned test",   True, [("testC","testC")]),
+	"dataset/wiki2C/.test1":  ("wikitext-2 cleaned test1",  True, [("testC1","testC1")]),
+	"dataset/wiki2C/.test2":  ("wikitext-2 cleaned test2",  True, [("testC2","testC2")]),
+	"dataset/wiki2C/.train":  ("wikitext-2 cleaned train",  True, [("trainC","trainC")]),
+	"dataset/wiki2C/.valid":  ("wikitext-2 cleaned valid",  True, [("validC","validC")]),
+	"dataset/wiki2C/.valid1": ("wikitext-2 cleaned valid1", True, [("validC1","validC1")]),
+
+	# wikitext-103
+	"dataset/wiki103/.full":  ("wikitext-103 full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/wiki103/.train": ("wikitext-103 train", True, [("train","train")]),
+	"dataset/wiki103/.valid": ("wikitext-103 valid", True, [("valid","valid")]),
+	"dataset/wiki103/.test":  ("wikitext-103 test",  True, [("test","test")]),
+
+	# wikitext-103 cleaned
+	"dataset/wiki103C/.full":  ("wikitext-103 cleaned full",  True, [("train","trainC"), ("valid","validC"), ("test","testC")]),
+	"dataset/wiki103C/.train": ("wikitext-103 cleaned train", True, [("trainC","trainC")]),
+	"dataset/wiki103C/.test":  ("wikitext-103 cleaned test",  True, [("testC","testC")]),
+	"dataset/wiki103C/.valid": ("wikitext-103 cleaned valid", True, [("validC","validC")]),
+
+	# wikitext-103 raw (was incorrectly assigning to trainC/testC/validC; fixed to train/test/valid)
+	"dataset/wiki103R/.full":  ("wikitext-103 raw full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/wiki103R/.train": ("wikitext-103 raw train", True, [("train","train")]),
+	"dataset/wiki103R/.test":  ("wikitext-103 raw test",  True, [("test","test")]),
+	"dataset/wiki103R/.valid": ("wikitext-103 raw valid", True, [("valid","valid")]),
+
+	# wikitext-19
+	"dataset/wiki19/.full":  ("wikitext-19 full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/wiki19/.train": ("wikitext-19 train", True, [("train","train")]),
+	"dataset/wiki19/.valid": ("wikitext-19 valid", True, [("valid","valid")]),
+	"dataset/wiki19/.test":  ("wikitext-19 test",  True, [("test","test")]),
+
+	# wikitext-19 cleaned
+	"dataset/wiki19C/.full":  ("wikitext-19 cleaned full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/wiki19C/.train": ("wikitext-19 cleaned train", True, [("train","train")]),
+	"dataset/wiki19C/.valid": ("wikitext-19 cleaned valid", True, [("valid","valid")]),
+	"dataset/wiki19C/.test":  ("wikitext-19 cleaned test",  True, [("test","test")]),
+
+	# wikitext-19L (Text8-Like)
+	"dataset/wiki19L/.full":  ("wikitext-19L Text8-Like full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/wiki19L/.train": ("wikitext-19L Text8-Like train", True, [("train","train")]),
+	"dataset/wiki19L/.valid": ("wikitext-19L Text8-Like valid", True, [("valid","valid")]),
+	"dataset/wiki19L/.test":  ("wikitext-19L Text8-Like test",  True, [("test","test")]),
+
+	# wikitext-19L-wor (Text8-Like without rare words)
+	"dataset/wiki19L-wor/.full":  ("wikitext-19L-wor full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/wiki19L-wor/.train": ("wikitext-19L-wor train", True, [("train","train")]),
+	"dataset/wiki19L-wor/.valid": ("wikitext-19L-wor valid", True, [("valid","valid")]),
+	"dataset/wiki19L-wor/.test":  ("wikitext-19L-wor test",  True, [("test","test")]),
+
+	# wikitext-2 modified splits
+	"dataset/wiki2M/.test1":  ("wikitext-2 test1",  True, [("test1","test1")]),
+	"dataset/wiki2M/.test2":  ("wikitext-2 test2",  True, [("test2","test2")]),
+	"dataset/wiki2M/.valid1": ("wikitext-2 valid1", True, [("valid1","valid1")]),
+
+	# wikitext-2 resampled (R1–R4)
+	"dataset/wiki2Resample/.full1":  ("wikitext-2 Resampled 1 full",  True, [("train","trainR1"), ("valid","validR1"), ("test","testR1")]),
+	"dataset/wiki2Resample/.test1":  ("wikitext-2 Resampled 1 test",  True, [("test","testR1")]),
+	"dataset/wiki2Resample/.train1": ("wikitext-2 Resampled 1 train", True, [("train","trainR1")]),
+	"dataset/wiki2Resample/.valid1": ("wikitext-2 Resampled 1 valid", True, [("valid","validR1")]),
+	"dataset/wiki2Resample/.full2":  ("wikitext-2 Resampled 2 full",  True, [("train","trainR2"), ("valid","validR2"), ("test","testR2")]),
+	"dataset/wiki2Resample/.test2":  ("wikitext-2 Resampled 2 test",  True, [("test","testR2")]),
+	"dataset/wiki2Resample/.train2": ("wikitext-2 Resampled 2 train", True, [("train","trainR2")]),
+	"dataset/wiki2Resample/.valid2": ("wikitext-2 Resampled 2 valid", True, [("valid","validR2")]),
+	"dataset/wiki2Resample/.full3":  ("wikitext-2 Resampled 3 full",  True, [("train","trainR3"), ("valid","validR3"), ("test","testR3")]),
+	"dataset/wiki2Resample/.test3":  ("wikitext-2 Resampled 3 test",  True, [("test","testR3")]),
+	"dataset/wiki2Resample/.train3": ("wikitext-2 Resampled 3 train", True, [("train","trainR3")]),
+	"dataset/wiki2Resample/.valid3": ("wikitext-2 Resampled 3 valid", True, [("valid","validR3")]),
+	"dataset/wiki2Resample/.full4":  ("wikitext-2 Resampled 4 full",  True, [("train","trainR4"), ("valid","validR4"), ("test","testR4")]),
+	"dataset/wiki2Resample/.test4":  ("wikitext-2 Resampled 4 test",  True, [("test","testR4")]),
+	"dataset/wiki2Resample/.train4": ("wikitext-2 Resampled 4 train", True, [("train","trainR4")]),
+	"dataset/wiki2Resample/.valid4": ("wikitext-2 Resampled 4 valid", True, [("valid","validR4")]),
+
+	# wikitext-2 samples (1–4)
+	"dataset/wiki2Samples/.full1":  ("wikitext-2 Samples 1 full",  True, [("train","train_1"), ("valid","valid_1"), ("test","test_1")]),
+	"dataset/wiki2Samples/.test1":  ("wikitext-2 Samples 1 test",  True, [("test","test_1")]),
+	"dataset/wiki2Samples/.train1": ("wikitext-2 Samples 1 train", True, [("train","train_1")]),
+	"dataset/wiki2Samples/.valid1": ("wikitext-2 Samples 1 valid", True, [("valid","valid_1")]),
+	"dataset/wiki2Samples/.full2":  ("wikitext-2 Samples 2 full",  True, [("train","train_2"), ("valid","valid_2"), ("test","test_2")]),
+	"dataset/wiki2Samples/.test2":  ("wikitext-2 Samples 2 test",  True, [("test","test_2")]),
+	"dataset/wiki2Samples/.train2": ("wikitext-2 Samples 2 train", True, [("train","train_2")]),
+	"dataset/wiki2Samples/.valid2": ("wikitext-2 Samples 2 valid", True, [("valid","valid_2")]),
+	"dataset/wiki2Samples/.full3":  ("wikitext-2 Samples 3 full",  True, [("train","train_3"), ("valid","valid_3"), ("test","test_3")]),
+	"dataset/wiki2Samples/.test3":  ("wikitext-2 Samples 3 test",  True, [("test","test_3")]),
+	"dataset/wiki2Samples/.train3": ("wikitext-2 Samples 3 train", True, [("train","train_3")]),
+	"dataset/wiki2Samples/.valid3": ("wikitext-2 Samples 3 valid", True, [("valid","valid_3")]),
+	"dataset/wiki2Samples/.full4":  ("wikitext-2 Samples 4 full",  True, [("train","train_4"), ("valid","valid_4"), ("test","test_4")]),
+	"dataset/wiki2Samples/.test4":  ("wikitext-2 Samples 4 test",  True, [("test","test_4")]),
+	"dataset/wiki2Samples/.train4": ("wikitext-2 Samples 4 train", True, [("train","train_4")]),
+	"dataset/wiki2Samples/.valid4": ("wikitext-2 Samples 4 valid", True, [("valid","valid_4")]),
+
+	# wikitext-2 Homogenous (H1, H2, CH1, CH2)
+	"dataset/wiki2Homogenous/.fullH1":   ("wikitext-2 Homogenous 1 full",          True, [("train","trainH1"), ("valid","validH1"), ("test","testH1")]),
+	"dataset/wiki2Homogenous/.testH1":   ("wikitext-2 Homogenous 1 test",          True, [("test","testH1")]),
+	"dataset/wiki2Homogenous/.trainH1":  ("wikitext-2 Homogenous 1 train",         True, [("train","trainH1")]),
+	"dataset/wiki2Homogenous/.validH1":  ("wikitext-2 Homogenous 1 valid",         True, [("valid","validH1")]),
+	"dataset/wiki2Homogenous/.fullH2":   ("wikitext-2 Homogenous 2 full",          True, [("train","trainH2"), ("valid","validH2"), ("test","testH2")]),
+	"dataset/wiki2Homogenous/.testH2":   ("wikitext-2 Homogenous 2 test",          True, [("test","testH2")]),
+	"dataset/wiki2Homogenous/.trainH2":  ("wikitext-2 Homogenous 2 train",         True, [("train","trainH2")]),
+	"dataset/wiki2Homogenous/.validH2":  ("wikitext-2 Homogenous 2 valid",         True, [("valid","validH2")]),
+	"dataset/wiki2Homogenous/.fullCH1":  ("wikitext-2 Homogenous Cleaned 1 full",  True, [("train","trainCH1"), ("valid","validCH1"), ("test","testCH1")]),
+	"dataset/wiki2Homogenous/.testCH1":  ("wikitext-2 Homogenous Cleaned 1 test",  True, [("test","testCH1")]),
+	"dataset/wiki2Homogenous/.trainCH1": ("wikitext-2 Homogenous Cleaned 1 train", True, [("train","trainCH1")]),
+	"dataset/wiki2Homogenous/.validCH1": ("wikitext-2 Homogenous Cleaned 1 valid", True, [("valid","validCH1")]),
+	"dataset/wiki2Homogenous/.fullCH2":  ("wikitext-2 Homogenous Cleaned 2 full",  True, [("train","trainCH2"), ("valid","validCH2"), ("test","testCH2")]),
+	"dataset/wiki2Homogenous/.testCH2":  ("wikitext-2 Homogenous Cleaned 2 test",  True, [("test","testCH2")]),
+	"dataset/wiki2Homogenous/.trainCH2": ("wikitext-2 Homogenous Cleaned 2 train", True, [("train","trainCH2")]),
+	"dataset/wiki2Homogenous/.validCH2": ("wikitext-2 Homogenous Cleaned 2 valid", True, [("valid","validCH2")]),
+
+	# Hutter Prize / text8 (direct file paths, no subdirectory)
+	"dataset/hutter/enwik8":             ("Hutter Enwik8",                    False, [("enwik8", None)]),
+	"dataset/hutter/text8":              ("Hutter Text8",                     False, [("text8",  None)]),
+	"dataset/hutter/text8-small":        ("text8 small",                      False, [("train",  None)]),
+	"dataset/hutter/text8-wo-r-2":       ("text8 without rare words 2",       False, [("full",   None)]),
+	"dataset/hutter/text8-small-wo-r-2": ("text8 small without rare words 2", False, [("full",   None)]),
+	"dataset/hutter/text8-small-wo-r-4": ("text8 small without rare words 4", False, [("full",   None)]),
+
+	# text8w (subdirectory)
+	"dataset/hutter/text8w/.full":  ("text8w full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/hutter/text8w/.train": ("text8w train", True, [("train","train")]),
+	"dataset/hutter/text8w/.valid": ("text8w valid", True, [("valid","valid")]),
+	"dataset/hutter/text8w/.test":  ("text8w test",  True, [("test","test")]),
+
+	# text8w_S (subdirectory)
+	"dataset/hutter/text8w_S/.full":  ("text8w_S full",  True, [("train","train"), ("valid","valid"), ("test","test")]),
+	"dataset/hutter/text8w_S/.train": ("text8w_S train", True, [("train","train")]),
+	"dataset/hutter/text8w_S/.valid": ("text8w_S valid", True, [("valid","valid")]),
+	"dataset/hutter/text8w_S/.test":  ("text8w_S test",  True, [("test","test")]),
+
+	# text8w_small (subdirectory, .txt extensions)
+	"dataset/hutter/text8w_small/.full":  ("text8w small full",  True, [("train","train.txt"), ("valid","valid.txt"), ("test","test.txt")]),
+	"dataset/hutter/text8w_small/.train": ("text8w small train", True, [("train","train.txt")]),
+	"dataset/hutter/text8w_small/.valid": ("text8w small valid", True, [("valid","valid.txt")]),
+	"dataset/hutter/text8w_small/.test":  ("text8w small test",  True, [("test","test.txt")]),
+
+	# ptb_text8 (subdirectory, .txt extensions)
+	"dataset/ptb_text8/.full":       ("ptb_text8 full",        True,  [("train","train.txt"), ("valid","valid.txt"), ("test","test.txt")]),
+	"dataset/ptb_text8/.train":      ("ptb_text8 train",       True,  [("train","train.txt")]),
+	"dataset/ptb_text8/.valid":      ("ptb_text8 valid",       True,  [("valid","valid.txt")]),
+	"dataset/ptb_text8/.test":       ("ptb_text8 test",        True,  [("test","test.txt")]),
+	"dataset/ptb_text8/train_small": ("ptb_text8 train small", False, [("train", None)]),
+}
 
 
 class Dictionary(object):
@@ -46,7 +209,7 @@ class SequentialData(object):
 		self.__wordLine.append(wordID)
 
 	def add_data(self):
-		self.dataArray = self.dataArray + self.__wordLine
+		self.dataArray.extend(self.__wordLine)
 		self.averageLength = (self.averageLength * len(self.wordCountList) + len(self.__wordLine)) / (len(self.wordCountList) + 1)
 		self.wordCountList.append(len(self.__wordLine))
 		self.fileStartIndex.append(self.totalLength)
@@ -64,587 +227,36 @@ class Corpus(object):
 		print("Total Length: {0}".format(self.sequentialData.totalLength))
 
 	def choose_dataset(self, path):
-
-		if path == "dataset/ptb/.full":
-			print("Penn Tree Bank Full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/ptb/.train":
-			print("Penn Tree Bank Train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/ptb/.valid":
-			print("Penn Tree Bank Valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/ptb/.test":
-			print("Penn Tree Bank Test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-
-		elif path == "dataset/wiki2/.full":
-			print("wikitext-2 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/wiki2/.train":
-			print("wikitext-2 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/wiki2/.valid":
-			print("wikitext-2 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/wiki2/.test":
-			print("wikitext-2 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-		elif path == "dataset/wiki2R/.full":
-			print("wikitext-2 raw full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/wiki2R/.train":
-			print("wikitext-2 raw train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/wiki2R/.valid":
-			print("wikitext-2 raw valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/wiki2R/.test":
-			print("wikitext-2 raw test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-		elif path == "dataset/wiki2C/.full":
-			print("wikitext-2 cleaned full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainC'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validC'))
-			self.test = self.tokenize_file(os.path.join(path, 'testC'))
-		elif path == "dataset/wiki2C/.test":
-			print("wikitext-2 cleaned testC dataset")
-			path = path.split('.')[0]
-			self.testC = self.tokenize_file(os.path.join(path, 'testC'))
-		elif path == "dataset/wiki2C/.test1":
-			print("wikitext-2 cleaned testC1 dataset")
-			path = path.split('.')[0]
-			self.testC1 = self.tokenize_file(os.path.join(path, 'testC1'))
-		elif path == "dataset/wiki2C/.test2":
-			print("wikitext-2 cleaned testC2 dataset")
-			path = path.split('.')[0]
-			self.testC2 = self.tokenize_file(os.path.join(path, 'testC2'))
-		elif path == "dataset/wiki2C/.train":
-			print("wikitext-2 cleaned train dataset")
-			path = path.split('.')[0]
-			self.trainC = self.tokenize_file(os.path.join(path, 'trainC'))
-		elif path == "dataset/wiki2C/.valid":
-			print("wikitext-2 cleaned validC dataset")
-			path = path.split('.')[0]
-			self.validC = self.tokenize_file(os.path.join(path, 'validC'))
-		elif path == "dataset/wiki2C/.valid1":
-			print("wikitext-2 cleaned validC1 dataset")
-			path = path.split('.')[0]
-			self.validC1 = self.tokenize_file(os.path.join(path, 'validC1'))
-
-
-		elif path == "dataset/wiki103/.full":
-			print("wikitext-103 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/wiki103/.train":
-			print("wikitext-103 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/wiki103/.valid":
-			print("wikitext-103 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/wiki103/.test":
-			print("wikitext-103 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-		elif path == "dataset/wiki103C/.full":
-			print("wikitext-103 cleaned full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainC'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validC'))
-			self.test = self.tokenize_file(os.path.join(path, 'testC'))
-		elif path == "dataset/wiki103C/.train":
-			print("wikitext-103 cleaned trainC dataset")
-			path = path.split('.')[0]
-			self.trainC = self.tokenize_file(os.path.join(path, 'trainC'))
-		elif path == "dataset/wiki103C/.test":
-			print("wikitext-103 cleaned testC dataset")
-			path = path.split('.')[0]
-			self.testC = self.tokenize_file(os.path.join(path, 'testC'))
-		elif path == "dataset/wiki103C/.valid":
-			print("wikitext-103 cleaned validC dataset")
-			path = path.split('.')[0]
-			self.validC = self.tokenize_file(os.path.join(path, 'validC'))
-
-		elif path == "dataset/wiki103R/.full":
-			print("wikitext-103 raw full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/wiki103R/.train":
-			print("wikitext-103 raw train dataset")
-			path = path.split('.')[0]
-			self.trainC = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/wiki103R/.test":
-			print("wikitext-103 raw test dataset")
-			path = path.split('.')[0]
-			self.testC = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/wiki103R/.valid":
-			print("wikitext-103 raw valid dataset")
-			path = path.split('.')[0]
-			self.validC = self.tokenize_file(os.path.join(path, 'valid'))
-
-
-		elif path == "dataset/wiki19/.full":
-			print("wikitext-19 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/wiki19/.train":
-			print("wikitext-19 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/wiki19/.valid":
-			print("wikitext-19 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/wiki19/.test":
-			print("wikitext-19 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-		elif path == "dataset/wiki19C/.full":
-			print("wikitext-19 cleaned full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/wiki19C/.train":
-			print("wikitext-19 cleaned train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/wiki19C/.valid":
-			print("wikitext-19 cleaned valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/wiki19C/.test":
-			print("wikitext-19 cleaned test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-		elif path == "dataset/wiki19L/.full":
-			print("wikitext-19L Text8-Like full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/wiki19L/.train":
-			print("wikitext-19L Text8-Like train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/wiki19L/.valid":
-			print("wikitext-19L Text8-Like valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/wiki19L/.test":
-			print("wikitext-19L Text8-Like test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-		elif path == "dataset/wiki19L-wor/.full":
-			print("wikitext-19L-wor Text8-Like wor full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/wiki19L-wor/.train":
-			print("wikitext-19L-wor Text-Like wor train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/wiki19L-wor/.valid":
-			print("wikitext-19L-wor Text-Like wor valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/wiki19L-wor/.test":
-			print("wikitext-19L-wor Text8-Like wor test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-
-		elif path == "dataset/wiki2M/.test1":
-			print("wikitext-2 test1 dataset")
-			path = path.split('.')[0]
-			self.test1 = self.tokenize_file(os.path.join(path, 'test1'))
-		elif path == "dataset/wiki2M/.test2":
-			print("wikitext-2 test2 dataset")
-			path = path.split('.')[0]
-			self.test2 = self.tokenize_file(os.path.join(path, 'test2'))
-		elif path == "dataset/wiki2M/.valid1":
-			print("wikitext-2 valid1 dataset")
-			path = path.split('.')[0]
-			self.valid1 = self.tokenize_file(os.path.join(path, 'valid1'))
-
-
-		elif path == "dataset/wiki2Resample/.full1":
-			print("wikitext-2 Reshaped 1 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainR1'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validR1'))
-			self.test = self.tokenize_file(os.path.join(path, 'testR1'))
-		elif path == "dataset/wiki2Resample/.test1":
-			print("wikitext-2 Reshaped 1 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'testR1'))
-		elif path == "dataset/wiki2Resample/.train1":
-			print("wikitext-2 Reshaped 1 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainR1'))
-		elif path == "dataset/wiki2Resample/.valid1":
-			print("wikitext-2 Reshaped 1 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'validR1'))
-		elif path == "dataset/wiki2Resample/.full2":
-			print("wikitext-2 Reshaped 2 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainR2'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validR2'))
-			self.test = self.tokenize_file(os.path.join(path, 'testR2'))
-		elif path == "dataset/wiki2Resample/.test2":
-			print("wikitext-2 Reshaped 2 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'testR2'))
-		elif path == "dataset/wiki2Resample/.train2":
-			print("wikitext-2 Reshaped 2 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainR2'))
-		elif path == "dataset/wiki2Resample/.valid2":
-			print("wikitext-2 Reshaped 2 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'validR2'))
-		elif path == "dataset/wiki2Resample/.full3":
-			print("wikitext-2 Reshaped 3 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainR3'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validR3'))
-			self.test = self.tokenize_file(os.path.join(path, 'testR3'))
-		elif path == "dataset/wiki2Resample/.test3":
-			print("wikitext-2 Reshaped 3 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'testR3'))
-		elif path == "dataset/wiki2Resample/.train3":
-			print("wikitext-2 Reshaped 3 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainR3'))
-		elif path == "dataset/wiki2Resample/.valid3":
-			print("wikitext-2 Reshaped 3 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'validR3'))
-		elif path == "dataset/wiki2Resample/.full4":
-			print("wikitext-2 Reshaped 4 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainR4'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validR4'))
-			self.test = self.tokenize_file(os.path.join(path, 'testR4'))
-		elif path == "dataset/wiki2Resample/.test4":
-			print("wikitext-2 Reshaped 4 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'testR4'))
-		elif path == "dataset/wiki2Resample/.train4":
-			print("wikitext-2 Reshaped 4 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainR4'))
-		elif path == "dataset/wiki2Resample/.valid4":
-			print("wikitext-2 Reshaped 4 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'validR4'))
-
-
-		elif path == "dataset/wiki2Samples/.full1":
-			print("wikitext-2 Samples 1 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train_1'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid_1'))
-			self.test = self.tokenize_file(os.path.join(path, 'test_1'))
-		elif path == "dataset/wiki2Samples/.test1":
-			print("wikitext-2 Samples 1 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test_1'))
-		elif path == "dataset/wiki2Samples/.train1":
-			print("wikitext-2 Samples 1 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train_1'))
-		elif path == "dataset/wiki2Samples/.valid1":
-			print("wikitext-2 Samples 1 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid_1'))
-		elif path == "dataset/wiki2Samples/.full2":
-			print("wikitext-2 Samples 2 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train_2'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid_2'))
-			self.test = self.tokenize_file(os.path.join(path, 'test_2'))
-		elif path == "dataset/wiki2Samples/.test2":
-			print("wikitext-2 Samples 2 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test_2'))
-		elif path == "dataset/wiki2Samples/.train2":
-			print("wikitext-2 Samples 2 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train_2'))
-		elif path == "dataset/wiki2Samples/.valid2":
-			print("wikitext-2 Samples 2 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid_2'))
-		elif path == "dataset/wiki2Samples/.full3":
-			print("wikitext-2 Samples 3 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train_3'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid_3'))
-			self.test = self.tokenize_file(os.path.join(path, 'test_3'))
-		elif path == "dataset/wiki2Samples/.test3":
-			print("wikitext-2 Samples 3 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test_3'))
-		elif path == "dataset/wiki2Samples/.train3":
-			print("wikitext-2 Samples 3 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train_3'))
-		elif path == "dataset/wiki2Samples/.valid3":
-			print("wikitext-2 Samples 3 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid_3'))
-		elif path == "dataset/wiki2Samples/.full4":
-			print("wikitext-2 Samples 4 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train_4'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid_4'))
-			self.test = self.tokenize_file(os.path.join(path, 'test_4'))
-		elif path == "dataset/wiki2Samples/.test4":
-			print("wikitext-2 Samples 4 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test_4'))
-		elif path == "dataset/wiki2Samples/.train4":
-			print("wikitext-2 Samples 4 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train_4'))
-		elif path == "dataset/wiki2Samples/.valid4":
-			print("wikitext-2 Samples 4 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid_4'))
-
-
-		elif path == "dataset/wiki2Homogenous/.fullH1":
-			print("wikitext-2 Homogenous 1 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainH1'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validH1'))
-			self.test = self.tokenize_file(os.path.join(path, 'testH1'))
-		elif path == "dataset/wiki2Homogenous/.testH1":
-			print("wikitext-2 Homogenous 1 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'testH1'))
-		elif path == "dataset/wiki2Homogenous/.trainH1":
-			print("wikitext-2 Homogenous 1 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainH1'))
-		elif path == "dataset/wiki2Homogenous/.validH1":
-			print("wikitext-2 Homogenous 1 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'validH1'))
-		elif path == "dataset/wiki2Homogenous/.fullH2":
-			print("wikitext-2 Homogenous 2 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainH2'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validH2'))
-			self.test = self.tokenize_file(os.path.join(path, 'testH2'))
-		elif path == "dataset/wiki2Homogenous/.testH2":
-			print("wikitext-2 Homogenous 2 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'testH2'))
-		elif path == "dataset/wiki2Homogenous/.trainH2":
-			print("wikitext-2 Homogenous 2 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainH2'))
-		elif path == "dataset/wiki2Homogenous/.validH2":
-			print("wikitext-2 Homogenous 2 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'validH2'))
-		elif path == "dataset/wiki2Homogenous/.fullCH1":
-			print("wikitext-2 Homogenous Cleaned 1 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainCH1'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validCH1'))
-			self.test = self.tokenize_file(os.path.join(path, 'testCH1'))
-		elif path == "dataset/wiki2Homogenous/.testCH1":
-			print("wikitext-2 Homogenous Cleaned 1 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'testCH1'))
-		elif path == "dataset/wiki2Homogenous/.trainCH1":
-			print("wikitext-2 Homogenous Cleaned 1 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainCH1'))
-		elif path == "dataset/wiki2Homogenous/.validCH1":
-			print("wikitext-2 Homogenous Cleaned 1 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'validCH1'))
-		elif path == "dataset/wiki2Homogenous/.fullCH2":
-			print("wikitext-2 Homogenous Cleaned 2 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainCH2'))
-			self.valid = self.tokenize_file(os.path.join(path, 'validCH2'))
-			self.test = self.tokenize_file(os.path.join(path, 'testCH2'))
-		elif path == "dataset/wiki2Homogenous/.testCH2":
-			print("wikitext-2 Homogenous Cleaned 2 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'testCH2'))
-		elif path == "dataset/wiki2Homogenous/.trainCH2":
-			print("wikitext-2 Homogenous Cleaned 2 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'trainCH2'))
-		elif path == "dataset/wiki2Homogenous/.validCH2":
-			print("wikitext-2 Homogenous Cleaned 2 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'validCH2'))
-
-
-		elif path == "dataset/hutter/enwik8":
-			print("Hutter Enwik8 dataset")
-			self.enwik8 = self.tokenize_file(path)
-		elif path == "dataset/hutter/text8":
-			print("Hutter Text8 dataset")
-			self.text8 = self.tokenize_file(path)
-		elif path == "dataset/hutter/text8-small":
-			print("text8 small dataset")
-			self.train = self.tokenize_file(path)
-		elif path == "dataset/hutter/text8-wo-r-2":
-			print("text8 without rare words 2")
-			self.full = self.tokenize_file(path)
-		elif path == "dataset/hutter/text8-small-wo-r-2":
-			print("text8 small without rare words 2")
-			self.full = self.tokenize_file(path)
-		elif path == "dataset/hutter/text8-small-wo-r-4":
-			print("text8 small without rare words 4")
-			self.full = self.tokenize_file(path)
-
-
-		elif path == "dataset/hutter/text8w/.full":
-			print("text8w full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/hutter/text8w/.train":
-			print("text8w train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/hutter/text8w/.valid":
-			print("text8w valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/hutter/text8w/.test":
-			print("text8w test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-
-		elif path == "dataset/hutter/text8w_S/.full":
-			print("text8w full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-		elif path == "dataset/hutter/text8w_S/.train":
-			print("text8w train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train'))
-		elif path == "dataset/hutter/text8w_S/.valid":
-			print("text8w valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid'))
-		elif path == "dataset/hutter/text8w_S/.test":
-			print("text8w test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test'))
-
-
-		elif path == "dataset/hutter/text8w_small/.full":
-			print("text8w small full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train.txt'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid.txt'))
-			self.test = self.tokenize_file(os.path.join(path, 'test.txt'))
-		elif path == "dataset/hutter/text8w_small/.train":
-			print("text8w small train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train.txt'))
-		elif path == "dataset/hutter/text8w_small/.valid":
-			print("text8w small valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid.txt'))
-		elif path == "dataset/hutter/text8w_small/.test":
-			print("text8w small test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test.txt'))
-
-
-		elif path == "dataset/ptb_text8/.full":
-			print("ptb_text8 full dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train.txt'))
-			self.valid = self.tokenize_file(os.path.join(path, 'valid.txt'))
-			self.test = self.tokenize_file(os.path.join(path, 'test.txt'))
-		elif path == "dataset/ptb_text8/.train":
-			print("ptb_text8 train dataset")
-			path = path.split('.')[0]
-			self.train = self.tokenize_file(os.path.join(path, 'train.txt'))
-		elif path == "dataset/ptb_text8/.valid":
-			print("ptb_text8 valid dataset")
-			path = path.split('.')[0]
-			self.valid = self.tokenize_file(os.path.join(path, 'valid.txt'))
-		elif path == "dataset/ptb_text8/.test":
-			print("ptb_text8 test dataset")
-			path = path.split('.')[0]
-			self.test = self.tokenize_file(os.path.join(path, 'test.txt'))
-		elif path == "dataset/ptb_text8/train_small":
-			print("ptb_text8 train dataset")
-			self.train = self.tokenize_file(path)
-
-		else:
-			print("Please check the dataset path supplied. No such path found")
+		if path not in _REGISTRY:
+			print("Please check the dataset path supplied. No such path found: " + path)
+			print("Valid paths are listed in the _REGISTRY dict in data.py")
 			sys.exit(0)
+
+		label, is_subdir, splits = _REGISTRY[path]
+		print(label)
+
+		if is_subdir:
+			base = path.rsplit('.', 1)[0]
+			for attr, filename in splits:
+				setattr(self, attr, self.tokenize_file(os.path.join(base, filename)))
+		else:
+			for attr, _ in splits:
+				setattr(self, attr, self.tokenize_file(path))
+
 		return 1
 
 	def tokenize_file(self, path):
-		assert os.path.exists(path)
+		if not os.path.exists(path):
+			raise FileNotFoundError("Dataset file not found: " + path)
 		print(path)
-		with open(path, 'r') as f:
-			tokens = 0
+		with open(path, 'r', encoding='utf-8') as f:
 			for line in f:
 				if self.ifwords == 1:
 					words = line.split() + ['<eos>']
 				else:
-					words = list(line.strip().replace("<unk>", "^")) + [" "]
+					# Replace <unk> with a sentinel that cannot appear as a real character
+					words = list(line.strip().replace("<unk>", "\x00")) + [" "]
 
-				tokens += len(words)
 				for word in words:
 					wordID = self.dictionary.add_word(word)
 					self.sequentialData.add_to_list(wordID)

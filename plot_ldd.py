@@ -62,7 +62,7 @@ Hx = Hx[start-1:end]
 Hy = Hy[start-1:end]
 Hxy = Hxy[start-1:end]
 
-with plt.style.context(('seaborn')):
+with plt.style.context('seaborn-v0_8'):
 	fig, axes = plt.subplots(2, 2)
 
 	if args.loglog == 1:

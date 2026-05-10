@@ -3,11 +3,9 @@
 # System libs
 import os
 import argparse
-import subprocess
 
 # Installed libs
 import numpy as np
-import pickle
 
 import data
 import mutual_information as mi
@@ -16,9 +14,9 @@ import mutual_information as mi
 def main():
 	parser = argparse.ArgumentParser(description='Complex system properties of LM datasets')
 
-	parser.add_argument('--data', type=str, default='dataset/wiki2/', help='location of the data corpus')
+	parser.add_argument('--data', type=str, required=True, help='location of the data corpus (e.g. dataset/wiki2/.full)')
 	parser.add_argument('--words', type=int, default=0, help="Tokenize strings on words or characters: 1 = Words, 0 = Characters")
-	parser.add_argument('--cutoff', type=int, help="Value of maximum D you need.")
+	parser.add_argument('--cutoff', type=int, default=1000, help="Value of maximum D you need.")
 	parser.add_argument('--mi_method', type=str, default="grassberger", help="MI calculation method, Choose standard = Standard Calculation, grassberger = Grassberger adjustments")
 	parser.add_argument('--log_type', type=int, default=1, help="Choose Log Type, 0 = Log to the base e, 1 = log to the base 2, 2 = log to the base 10")
 	parser.add_argument('--threads', type=int, default=1, help='Number of threads to spawn')
@@ -33,16 +31,16 @@ def main():
 	# Load data
 	###############################################################################
 
+	# Create output directories so the script is self-contained
+	for d in ["experiments/datasetInIDs", "experiments/corpus", "experiments/zipf",
+	          "experiments/ldds", "experiments/heaps", "experiments/taylors",
+	          "experiments/ebelings", "experiments/recurrence"]:
+		os.makedirs(d, exist_ok=True)
+
 	corpus = data.Corpus(args.data, args.words)
-	np.savetxt("experiments/datasetInIDs/"+args.save_path+".out", np.asarray(corpus.sequentialData.dataArray, dtype=np.uint32), delimiter=',', fmt="%d")
-
-	fileObject = open('experiments/corpus/'+args.save_path+"_corpus.dat","wb")
-	pickle.dump(corpus, fileObject)
-	fileObject.close()
-
-	fileObject = open('experiments/corpus/'+args.save_path+"_corpus.dat","rb")
-	som = pickle.load(fileObject)
-	fileObject.close()
+	np.savetxt("experiments/datasetInIDs/"+args.save_path+".out",
+	           np.asarray(corpus.sequentialData.dataArray, dtype=np.uint32),
+	           delimiter=',', fmt="%d")
 
 	print("Corpus loaded")
 

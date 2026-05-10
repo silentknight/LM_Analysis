@@ -52,7 +52,7 @@ class Recurrence(object):
 				for i in range(no_of_threads):
 					thread[i].start()
 
-				# for i in range(no_of_threads):
+				for i in range(no_of_threads):
 					thread[i].join()
 
 				for i in range(no_of_threads):

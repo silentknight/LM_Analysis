@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-# System libs
 import numpy as np
 import scipy.special as spec
 import sys
@@ -10,113 +9,117 @@ import speedup as lddCalc
 import array
 import scipy.sparse as sp
 
+
 class myThread(threading.Thread):
-	def __init__(self, d, overlap, log_type, method):
+	def __init__(self, d, overlap, log_type, method, data_array, line_length_list, total_length):
 		self.d = d
 		self.Ni_X = 0
 		self.Ni_Y = 0
 		self.Ni_XY = 0
 		self.pmi = 0
+		self.Xi = None
+		self.Yi = None
 		self.complete = False
 		self.overlap = overlap
 		self.method = method
 		self.log_type = log_type
+		self.data_array = data_array
+		self.line_length_list = line_length_list
+		self.total_length = total_length
 		super(myThread, self).__init__()
 
 	def run(self):
-		Ni_X, Ni_Y, Ni_XY, self.Xi, self.Yi = lddCalc.getJointRV(dataArray, lineLengthList, totalLength, self.d, self.overlap)
+		Ni_X, Ni_Y, Ni_XY, self.Xi, self.Yi = lddCalc.getJointRV(
+			self.data_array, self.line_length_list, self.total_length, self.d, self.overlap)
 
-		try:
-			if Ni_X.nnz == 0 and Ni_Y.nnz == 0 and Ni_XY.nnz == 0:
-				self.complete = True
-				exit()
-		except ValueError:
-			pass
-
-		log = lambda val,base: np.log(val) if base==0 else np.log2(val)
+		if Ni_X is None:
+			self.complete = True
+			return
 
 		if self.method == "standard":
-			P_XY = Ni_XY/np.sum(Ni_XY)
-			P_X = (Ni_X/np.sum(Ni_X)).toarray()[0]
-			P_Y = (Ni_Y/np.sum(Ni_Y)).toarray()[0]
+			P_XY = Ni_XY / np.sum(Ni_XY)
+			P_X = (Ni_X / np.sum(Ni_X)).toarray()[0]
+			P_Y = (Ni_Y / np.sum(Ni_Y)).toarray()[0]
 			P_XY = P_XY.tocoo()
-			pmi_data = lddCalc.getStandardPMI(P_XY.data, np.uint64(P_XY.row), np.uint64(P_XY.col), P_X, P_Y, np.uint64(P_XY.data.size), np.uint64(P_X.size), np.uint64(P_Y.size), self.log_type)
+			pmi_data = lddCalc.getStandardPMI(
+				P_XY.data, np.uint64(P_XY.row), np.uint64(P_XY.col),
+				P_X, P_Y,
+				np.uint64(P_XY.data.size), np.uint64(P_X.size), np.uint64(P_Y.size),
+				self.log_type)
 			self.pmi = sp.coo_matrix((pmi_data, (P_XY.row, P_XY.col)), shape=P_XY.shape).tocsc()
 			self.Ni_X = Ni_X
 			self.Ni_Y = Ni_Y
 			self.Ni_XY = Ni_XY
 
+
 class PointwiseMutualInformation(object):
 	def __init__(self, corpusData, log_type, no_of_threads, data_file_path, overlap, method, cutoff):
-		global corpus
-		global dataArray
-		global lineLengthList
-		global totalLength
-		corpus = corpusData
-		dataArray = array.array('L', corpus.sequentialData.dataArray)
-		lineLengthList = np.array(corpus.sequentialData.wordCountList, dtype=np.uint64)
-		totalLength = corpus.sequentialData.totalLength
-		# self.no_of_threads = no_of_threads
-		self.no_of_threads = 1
+		self.corpus = corpusData
+		self.data_array = array.array('L', corpusData.sequentialData.dataArray)
+		self.line_length_list = np.array(corpusData.sequentialData.wordCountList, dtype=np.uint64)
+		self.total_length = corpusData.sequentialData.totalLength
+		self.no_of_threads = no_of_threads
 		self.directory = data_file_path
 		self.overlap = overlap
 		self.method = method
 		self.log_type = log_type
 		self.cutoff = cutoff
-		# Add more directories to create more refined data
 		self.pointwiseMutualInformation = self.calculate_PMI()
 
 	def calculate_PMI(self):
 		d = 1
-		print("Average String Length: ", int(corpus.sequentialData.averageLength))
-		print("Total String Length: ", int(corpus.sequentialData.totalLength))
+		print("Average String Length: ", int(self.corpus.sequentialData.averageLength))
+		print("Total String Length: ", int(self.corpus.sequentialData.totalLength))
 
+		# Resume from last saved distance if the output directory already has results
 		try:
-			d_num = []
-			files = sorted(os.listdir(self.directory+"/np"))
-			for file in files:
-				d_num.append(int(file.split('.')[0]))
+			files = sorted(os.listdir(os.path.join(self.directory, "np")))
+			d_nums = [int(f.split('.')[0]) for f in files if f.endswith('.npz')]
+			if d_nums:
+				d = max(d_nums) + 1
+		except (FileNotFoundError, OSError, ValueError, IndexError):
+			print(self.directory + " does not exist or cannot be loaded; starting fresh.")
 
-			d = sorted(d_num)[len(d_num)-1]+1
-			#d = sorted(d_num)[len(d_num)-1]
-		except:
-			print(self.directory+" does not exist. Hence cannot load the contents.")
+		with open(os.path.join(self.directory, "0.symbols.dat"), "w") as f:
+			f.write(str(self.corpus.dictionary.word2idx))
 
-		f = open(self.directory+"/0.symbols.dat","w")
-		f.write(str(corpus.dictionary.word2idx))
-		f.close()
-
-		if not os.path.isdir(self.directory+"/np"):
-			os.makedirs(self.directory+"/np")
-
-		if not os.path.isdir(self.directory+"/Ni_XY"):
-			os.makedirs(self.directory+"/Ni_XY")
-
-		if not os.path.isdir(self.directory+"/pmi"):
-			os.makedirs(self.directory+"/pmi")
+		os.makedirs(os.path.join(self.directory, "np"), exist_ok=True)
+		os.makedirs(os.path.join(self.directory, "Ni_XY"), exist_ok=True)
+		os.makedirs(os.path.join(self.directory, "pmi"), exist_ok=True)
 
 		end = False
+		distances_computed = 0
+
 		try:
-			max_distance = totalLength
-			while d<max_distance and d<=self.cutoff and end==False:
+			max_distance = self.total_length
+			while d < max_distance and d <= self.cutoff and not end:
 
 				thread = []
 				for i in range(self.no_of_threads):
-					thread.append(myThread(d+i, self.overlap, self.log_type, self.method))
+					thread.append(myThread(
+						d + i, self.overlap, self.log_type, self.method,
+						self.data_array, self.line_length_list, self.total_length))
 
 				for i in range(self.no_of_threads):
 					thread[i].start()
 
+				# Join all threads before reading results to avoid data races
 				for i in range(self.no_of_threads):
 					thread[i].join()
-					np.savez(self.directory+"/np/"+str(d), thread[i].Xi, thread[i].Yi, thread[i].Ni_X, thread[i].Ni_Y)
-					sp.save_npz(self.directory+"/Ni_XY/"+str(d), thread[i].Ni_XY)
-					sp.save_npz(self.directory+"/pmi/"+str(d), thread[i].pmi)
+
+				for i in range(self.no_of_threads):
+					if thread[i].complete:
+						end = True
+						break
+					np.savez(os.path.join(self.directory, "np", str(d + i)),
+					         thread[i].Xi, thread[i].Yi, thread[i].Ni_X, thread[i].Ni_Y)
+					sp.save_npz(os.path.join(self.directory, "Ni_XY", str(d + i)), thread[i].Ni_XY)
+					sp.save_npz(os.path.join(self.directory, "pmi", str(d + i)), thread[i].pmi)
+					distances_computed += 1
 
 				d += self.no_of_threads
-				#d += self.no_of_threads+(100000-self.no_of_threads)  # Skip by 1000 to avoid data storage issue
 
 		except KeyboardInterrupt:
-			print("Processed upto: "+str(d))
+			print("Processed upto: " + str(d))
 
-		return 100
+		return distances_computed

@@ -10,7 +10,7 @@ int main(int argc, char *argv[]) {
 	FILE *fo, *fo1, *fi;
 	char text[200];
 	unsigned long long int i, j, k, temp_k, index=0, seqLength=0;
-	unsigned long *wordIDSeq, *heaps, *subSeqLength, noOfSubSeq, ret, *wordFreqList, vocabularySize=1;
+	unsigned long *wordIDSeq, *heaps, *subSeqLength, noOfSubSeq, *wordFreqList, vocabularySize=1;
 	double tempSum, *mean, *variance, *sd;
 	time_t old_time;
 	char datasetFile[100];
@@ -36,17 +36,15 @@ int main(int argc, char *argv[]) {
 		exit(0);
 	}
 
-	while(!feof(fi))
+	while(fscanf(fi, "%199s", text) == 1)
 	{
-		fscanf(fi,"%s", text);
 		seqLength++;
 	}
 
 	wordIDSeq = (unsigned long*) malloc(seqLength*sizeof(unsigned long));
 	rewind(fi);
-	while(!feof(fi))
+	while(fscanf(fi, "%199s", text) == 1)
 	{
-		fscanf(fi,"%s", text);
 		wordIDSeq[index] = atoi(text);
 		if(wordIDSeq[index] > vocabularySize)
 		{
@@ -126,6 +124,11 @@ int main(int argc, char *argv[]) {
 	snprintf (ebelingsFile, 100, "experiments/ebelings/%s_ebelings.csv", argv[1]);
 	printf("%s\n", ebelingsFile);
 	fo1 = fopen(ebelingsFile, "w");
+	if(fo1 == NULL)
+	{
+		printf("Cannot open ebelings file\n");
+		exit(0);
+	}
 
 	variance = (double*) malloc(noOfSubSeq*sizeof(double));
 	for(k=0; k<noOfSubSeq; k++)
@@ -212,9 +215,17 @@ int main(int argc, char *argv[]) {
 		printf("Computed Standard Deviation\n");
 
 		variance[index++] = tempSum;
+		free(mean);
+		free(sd);
 	}
 	fclose(fo);
 	fclose(fo1);
+
+	free(wordIDSeq);
+	free(heaps);
+	free(wordFreqList);
+	free(variance);
+	free(subSeqLength);
 
 	printf("Taylor's Law & Ebeling's Method computed\n");
 }
