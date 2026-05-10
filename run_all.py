@@ -7,7 +7,7 @@ import subprocess
 import numpy as np
 
 import data
-import mi
+from analysis import mi
 
 
 def main():
@@ -77,7 +77,7 @@ def main():
 	###############################################################################
 
 	if 'pmi' in args.processes:
-		import pmi as pmi_mod
+		from analysis import pmi as pmi_mod
 		pmi_dir = args.pmi_dir or os.path.join("experiments/pmi", args.save_path)
 		os.makedirs(pmi_dir, exist_ok=True)
 		pmi_mod.PointwiseMutualInformation(corpus, args.log_type, args.threads,
@@ -89,16 +89,17 @@ def main():
 	###############################################################################
 
 	if 'heaps' in args.processes:
-		if not os.path.exists('./main'):
-			print("Compiling main.c ...")
-			result = subprocess.run(['gcc', '-O2', '-o', 'main', 'main.c', '-lm'],
+		binary = 'analysis/main'
+		if not os.path.exists(binary):
+			print("Compiling analysis/main.c ...")
+			result = subprocess.run(['gcc', '-O2', '-o', binary, 'analysis/main.c', '-lm'],
 			                        capture_output=True, text=True)
 			if result.returncode != 0:
 				print("Compilation failed:\n" + result.stderr)
 			else:
-				print("Compiled main.c")
-		if os.path.exists('./main'):
-			subprocess.run(['./main', args.save_path])
+				print("Compiled analysis/main.c")
+		if os.path.exists(binary):
+			subprocess.run([binary, args.save_path])
 			print("Heaps, Taylors, Ebelings Computed")
 
 	###############################################################################
@@ -106,7 +107,7 @@ def main():
 	###############################################################################
 
 	if 'recurrence' in args.processes:
-		import recurrence as rec_mod
+		from analysis import recurrence as rec_mod
 		recur = rec_mod.Recurrence(corpus, args.threads)
 		rec_path = 'experiments/recurrence/' + args.save_path + '.npz'
 		np.savez_compressed(rec_path, **{str(k): v for k, v in recur.recurrenceList.items()})

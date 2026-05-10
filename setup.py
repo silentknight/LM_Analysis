@@ -26,7 +26,7 @@ for _key in ('LDSHARED', 'BLDSHARED'):
 
 setup(
     ext_modules=cythonize(
-        "speedup.pyx",
+        "analysis/speedup.pyx",
         annotate=True,
         compiler_directives={"language_level": "3"},
     ),

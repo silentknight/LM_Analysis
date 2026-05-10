@@ -5,7 +5,7 @@ import scipy.special as spec
 import sys
 import threading
 import os
-import speedup as lddCalc
+from . import speedup as lddCalc
 import array
 import scipy.sparse as sp
 

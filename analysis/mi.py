@@ -8,7 +8,7 @@ import threading
 import os
 import array
 import scipy.sparse
-import speedup
+from . import speedup
 
 
 class myThread(threading.Thread):
