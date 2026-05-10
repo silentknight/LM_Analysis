@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 
 import data
-import mutual_information as mi
+import mi
 
 
 def main():
