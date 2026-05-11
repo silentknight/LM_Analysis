@@ -1,66 +1,79 @@
 import numpy as np
 cimport numpy as np
-from cpython cimport array
-import array
 import scipy.sparse
 
 
 cpdef getJointRV(dataArray, unsigned long[:] lineLengthList, int totalLength, int d, int overlap):
 
-	cdef array.array X = array.array('L', [])
-	cdef array.array Y = array.array('L', [])
 	cdef unsigned long index = 0
-	cdef unsigned long steps = 0
 	cdef unsigned long nLines = lineLengthList.shape[0]
 	cdef unsigned long i = 0
 	cdef unsigned long line_len = 0
 
+	# Zero-copy view of input buffer — avoids the 2×N copy from array.extend
+	data_np = np.frombuffer(dataArray, dtype=np.uint64)
+
 	if overlap == 1:
-		# Treat entire dataset as one sequence without mutating the input array
-		steps = totalLength // d
-		if steps > 1:
-			array.extend(X, dataArray[0:totalLength - d])
-			array.extend(Y, dataArray[d:totalLength])
+		if totalLength // d <= 1:
+			return None, None, None, None, None
+		X_arr = data_np[:totalLength - d]
+		Y_arr = data_np[d:totalLength]
 	else:
+		x_parts = []
+		y_parts = []
 		for i in range(nLines):
 			line_len = lineLengthList[i]
-			steps = line_len // d
-			if steps > 1:
-				array.extend(X, dataArray[index:index + line_len - d])
-				array.extend(Y, dataArray[index + d:index + line_len])
+			if line_len // d > 1:
+				x_parts.append(data_np[index:index + line_len - d])
+				y_parts.append(data_np[index + d:index + line_len])
 			index += line_len
+		if not x_parts:
+			return None, None, None, None, None
+		X_arr = np.concatenate(x_parts)
+		Y_arr = np.concatenate(y_parts)
 
-	if len(X) == 0 or len(Y) == 0:
+	if len(X_arr) == 0:
 		return None, None, None, None, None
 
-	unique_X, counts_X = np.unique(X, return_counts=True)
-	unique_Y, counts_Y = np.unique(Y, return_counts=True)
+	unique_X, counts_X = np.unique(X_arr, return_counts=True)
+	unique_Y, counts_Y = np.unique(Y_arr, return_counts=True)
 
-	# unique arrays from np.unique are sorted, so [-1] gives max in O(1) vs max() O(n)
 	cdef unsigned long max_x = int(unique_X[-1]) + 1
 	cdef unsigned long max_y = int(unique_Y[-1]) + 1
 
-	# Count unique (X, Y) pairs via lexicographic sort — avoids int64 overflow
-	# that the previous numeric encoding (X * max_y + Y) could produce for large
-	# vocabularies where max_x * max_y > 2^63.
-	X_arr = np.asarray(X, dtype=np.int64)
-	Y_arr = np.asarray(Y, dtype=np.int64)
-	sort_idx = np.lexsort((Y_arr, X_arr))
-	X_sorted = X_arr[sort_idx]
-	Y_sorted = Y_arr[sort_idx]
+	# Reinterpret uint64 as int64 without copying (word IDs always fit in int64).
+	# view() is safe here because both types are 8 bytes and slices are contiguous.
+	X_i64 = X_arr.view(np.int64) if X_arr.flags['C_CONTIGUOUS'] else X_arr.astype(np.int64)
+	Y_i64 = Y_arr.view(np.int64) if Y_arr.flags['C_CONTIGUOUS'] else Y_arr.astype(np.int64)
+
+	sort_idx = np.lexsort((Y_i64, X_i64))
+	X_sorted = X_i64[sort_idx]
+	Y_sorted = Y_i64[sort_idx]
+	del sort_idx  # free index array before allocating diff_mask
+
 	diff_mask = np.empty(len(X_sorted), dtype=np.bool_)
 	diff_mask[0] = True
 	diff_mask[1:] = (X_sorted[1:] != X_sorted[:-1]) | (Y_sorted[1:] != Y_sorted[:-1])
-	pair_rows = X_sorted[diff_mask].astype(np.int64)
-	pair_cols = Y_sorted[diff_mask].astype(np.int64)
-	boundaries = np.concatenate((np.where(diff_mask)[0], [len(X_sorted)]))
-	pair_counts = np.diff(boundaries)
+
+	pair_rows = X_sorted[diff_mask]
+	pair_cols = Y_sorted[diff_mask]
+	del X_sorted, Y_sorted  # free sorted arrays before building sparse matrix
+
+	change_pos = np.where(diff_mask)[0]
+	n_total = len(X_arr)
+	del diff_mask
+
+	pair_counts = np.empty(len(change_pos), dtype=np.int64)
+	if len(change_pos) > 1:
+		pair_counts[:-1] = np.diff(change_pos)
+	if len(change_pos) > 0:
+		pair_counts[-1] = n_total - change_pos[-1]
+	del change_pos
+
 	XY = scipy.sparse.csc_matrix(
 		(pair_counts.astype(np.float64), (pair_rows, pair_cols)),
 		shape=(max_x, max_y))
 
-	# Return dense float64 arrays for Ni_X / Ni_Y — callers previously wrapped these
-	# in 1-row sparse matrices only to extract .data immediately afterwards
 	return counts_X.astype(np.float64), counts_Y.astype(np.float64), XY, unique_X, unique_Y
 
 
