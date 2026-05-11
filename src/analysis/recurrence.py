@@ -2,6 +2,7 @@
 
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
+from tqdm import tqdm
 
 
 class Recurrence(object):
@@ -20,7 +21,7 @@ class Recurrence(object):
 		# first element of each group is the word ID it belongs to
 		unique_ids = sorted_ids[np.concatenate(([0], splits))]
 
-		self.position_index = [np.empty(0, dtype=np.uint64)] * self.uniqueSize
+		self.position_index = [np.empty(0, dtype=np.uint64) for _ in range(self.uniqueSize)]
 		for word_id, group in zip(unique_ids, groups):
 			if word_id < self.uniqueSize:
 				self.position_index[word_id] = np.sort(group).astype(np.uint64)
@@ -28,7 +29,6 @@ class Recurrence(object):
 		self.recurrenceList = self.getRecurrence()
 
 	def getRecurrence(self):
-		report_interval = max(1, self.uniqueSize // 10)
 
 		def compute(positions):
 			if len(positions) > 1:
@@ -42,11 +42,12 @@ class Recurrence(object):
 			# O(V) Thread objects (one per word in the vocabulary).
 			# np.diff / np.unique release the GIL, so threads run in parallel.
 			with ThreadPoolExecutor(max_workers=self.no_of_threads) as executor:
-				for i, result in enumerate(executor.map(compute, self.position_index)):
-					recurrenceList[i] = result
-					if (i + 1) % report_interval == 0:
-						print("Processed: {:.0f}%".format((i + 1) * 100.0 / self.uniqueSize))
+				with tqdm(total=self.uniqueSize, desc="Recurrence",
+				          unit="word", dynamic_ncols=True) as pbar:
+					for i, result in enumerate(executor.map(compute, self.position_index)):
+						recurrenceList[i] = result
+						pbar.update(1)
 		except KeyboardInterrupt:
-			print("Processed upto: {0}".format(len(recurrenceList)))
+			print(f"\nInterrupted at word {len(recurrenceList)}")
 
 		return recurrenceList

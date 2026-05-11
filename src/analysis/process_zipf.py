@@ -43,12 +43,18 @@ def load_corpus(path):
 def reorder_to_train(train_ids, train_corpus, test_ids, test_corpus):
     """Return reordered (ids, frequency) aligned to train word rank order."""
     # Map word string → current position in the test array
+    test_vocab_size = len(test_corpus.dictionary.idx2word)
     test_pos = {test_corpus.dictionary.idx2word[wid]: pos
-                for pos, wid in enumerate(test_ids)}
+                for pos, wid in enumerate(test_ids)
+                if wid < test_vocab_size}
 
+    train_vocab_size = len(train_corpus.dictionary.idx2word)
     new_order = []
     absent = 0
     for wid in train_ids:
+        if wid >= train_vocab_size:
+            absent += 1
+            continue
         word = train_corpus.dictionary.idx2word[wid]
         if word in test_pos:
             new_order.append(test_pos[word])

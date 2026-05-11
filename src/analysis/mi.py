@@ -7,6 +7,7 @@ import threading
 import os
 import array
 import scipy.sparse
+from tqdm import tqdm
 from . import lddcalc
 
 
@@ -126,51 +127,58 @@ class MutualInformation(object):
 					w.writerow([i + 1, mi[i], Hx[i], Hy[i], Hxy[i]])
 		os.replace(tmp_path, self.filename)
 
+		max_distance = self.total_length
+		total_d = min(self.cutoff, max_distance - 1)
+		if d > 1:
+			print(f"Resuming MI from d={d}")
+
 		with open(self.filename, 'a', newline='') as f:
 			try:
-				max_distance = self.total_length
-				while d < max_distance and d <= self.cutoff and not end:
-					# Pre-extend lists with placeholder zeros for this batch
-					mi.extend([0.0] * self.no_of_threads)
-					Hx.extend([0.0] * self.no_of_threads)
-					Hy.extend([0.0] * self.no_of_threads)
-					Hxy.extend([0.0] * self.no_of_threads)
+				with tqdm(total=total_d, initial=d - 1, desc="MI (LDD)",
+				          unit="d", dynamic_ncols=True) as pbar:
+					while d < max_distance and d <= self.cutoff and not end:
 
-					thread = []
-					for i in range(self.no_of_threads):
-						thread.append(MyThread(
-							d + i, self.overlap, self.log_type, self.method,
-							self.data_array, self.line_length_list, self.total_length))
+						# Pre-extend lists with placeholder zeros for this batch
+						mi.extend([0.0] * self.no_of_threads)
+						Hx.extend([0.0] * self.no_of_threads)
+						Hy.extend([0.0] * self.no_of_threads)
+						Hxy.extend([0.0] * self.no_of_threads)
 
-					for i in range(self.no_of_threads):
-						thread[i].start()
+						thread = []
+						for i in range(self.no_of_threads):
+							thread.append(MyThread(
+								d + i, self.overlap, self.log_type, self.method,
+								self.data_array, self.line_length_list, self.total_length))
 
-					for i in range(self.no_of_threads):
-						thread[i].join()
+						for i in range(self.no_of_threads):
+							thread[i].start()
 
-					for i in range(self.no_of_threads):
-						if thread[i].complete or np.isnan(thread[i].mi):
-							end = True
-							# Trim trailing placeholder slots (O(1) list pop vs O(n) np.delete)
-							threads_remaining = self.no_of_threads - i
-							for _ in range(threads_remaining):
-								if mi and mi[-1] == 0.0:
-									del mi[-1]; del Hx[-1]; del Hy[-1]; del Hxy[-1]
-							break
+						for i in range(self.no_of_threads):
+							thread[i].join()
 
-						mi[d + i - 1] = thread[i].mi
-						Hx[d + i - 1] = thread[i].Hx
-						Hy[d + i - 1] = thread[i].Hy
-						Hxy[d + i - 1] = thread[i].Hxy
+						for i in range(self.no_of_threads):
+							if thread[i].complete or np.isnan(thread[i].mi):
+								end = True
+								# Trim trailing placeholder slots (O(1) list pop vs O(n) np.delete)
+								threads_remaining = self.no_of_threads - i
+								for _ in range(threads_remaining):
+									if mi and mi[-1] == 0.0:
+										del mi[-1]; del Hx[-1]; del Hy[-1]; del Hxy[-1]
+								break
 
-						print(thread[i].d, thread[i].mi, thread[i].Hx, thread[i].Hy,
-						      thread[i].Hx + thread[i].Hy, thread[i].Hxy)
-						csv.writer(f).writerow(
-						    [d + i, mi[d + i - 1], Hx[d + i - 1], Hy[d + i - 1], Hxy[d + i - 1]])
+							mi[d + i - 1] = thread[i].mi
+							Hx[d + i - 1] = thread[i].Hx
+							Hy[d + i - 1] = thread[i].Hy
+							Hxy[d + i - 1] = thread[i].Hxy
 
-					d += self.no_of_threads
+							csv.writer(f).writerow(
+							    [d + i, mi[d + i - 1], Hx[d + i - 1], Hy[d + i - 1], Hxy[d + i - 1]])
+							pbar.set_postfix(d=d + i, mi=f"{thread[i].mi:.4f}")
+							pbar.update(1)
+
+						d += self.no_of_threads
 
 			except KeyboardInterrupt:
-				print("Processed upto: " + str(d - 1))
+				print(f"\nInterrupted at d={d - 1}")
 
 		return np.array(mi), np.array(Hx), np.array(Hy), np.array(Hxy)

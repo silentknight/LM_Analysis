@@ -3,9 +3,10 @@
 import numpy as np
 import threading
 import os
-from . import lddcalc
 import array
 import scipy.sparse as sp
+from tqdm import tqdm
+from . import lddcalc
 
 
 class MyThread(threading.Thread):
@@ -95,38 +96,44 @@ class PointwiseMutualInformation(object):
 
 		end = False
 		distances_computed = 0
+		max_distance = self.total_length
+		total_d = min(self.cutoff, max_distance - 1)
+		if d > 1:
+			print(f"Resuming PMI from d={d}")
 
 		try:
-			max_distance = self.total_length
-			while d < max_distance and d <= self.cutoff and not end:
+			with tqdm(total=total_d, initial=d - 1, desc="PMI",
+			          unit="d", dynamic_ncols=True) as pbar:
+				while d < max_distance and d <= self.cutoff and not end:
 
-				thread = []
-				for i in range(self.no_of_threads):
-					thread.append(MyThread(
-						d + i, self.overlap, self.log_type, self.method,
-						self.data_array, self.line_length_list, self.total_length))
+					thread = []
+					for i in range(self.no_of_threads):
+						thread.append(MyThread(
+							d + i, self.overlap, self.log_type, self.method,
+							self.data_array, self.line_length_list, self.total_length))
 
-				for i in range(self.no_of_threads):
-					thread[i].start()
+					for i in range(self.no_of_threads):
+						thread[i].start()
 
-				# Join all threads before reading results to avoid data races
-				for i in range(self.no_of_threads):
-					thread[i].join()
+					# Join all threads before reading results to avoid data races
+					for i in range(self.no_of_threads):
+						thread[i].join()
 
-				for i in range(self.no_of_threads):
-					if thread[i].complete:
-						end = True
-						break
-					np.savez_compressed(os.path.join(self.directory, "marginals", str(d + i)),
-					                    Xi=thread[i].Xi, Yi=thread[i].Yi,
-					                    Ni_X=thread[i].Ni_X, Ni_Y=thread[i].Ni_Y)
-					sp.save_npz(os.path.join(self.directory, "Ni_XY", str(d + i)), thread[i].Ni_XY)
-					sp.save_npz(os.path.join(self.directory, "pmi", str(d + i)), thread[i].pmi)
-					distances_computed += 1
+					for i in range(self.no_of_threads):
+						if thread[i].complete:
+							end = True
+							break
+						np.savez_compressed(os.path.join(self.directory, "marginals", str(d + i)),
+						                    Xi=thread[i].Xi, Yi=thread[i].Yi,
+						                    Ni_X=thread[i].Ni_X, Ni_Y=thread[i].Ni_Y)
+						sp.save_npz(os.path.join(self.directory, "Ni_XY", str(d + i)), thread[i].Ni_XY)
+						sp.save_npz(os.path.join(self.directory, "pmi", str(d + i)), thread[i].pmi)
+						distances_computed += 1
+						pbar.update(1)
 
-				d += self.no_of_threads
+					d += self.no_of_threads
 
 		except KeyboardInterrupt:
-			print("Processed upto: " + str(d))
+			print(f"\nInterrupted at d={d}")
 
 		return distances_computed

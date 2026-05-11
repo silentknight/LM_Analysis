@@ -40,14 +40,21 @@ cpdef getJointRV(dataArray, unsigned long[:] lineLengthList, int totalLength, in
 	cdef unsigned long max_x = int(unique_X[-1]) + 1
 	cdef unsigned long max_y = int(unique_Y[-1]) + 1
 
-	# Pre-count XY pairs via integer pair-encoding + np.unique, avoiding an O(N)
-	# array of ones and letting numpy handle deduplication before building the matrix
+	# Count unique (X, Y) pairs via lexicographic sort — avoids int64 overflow
+	# that the previous numeric encoding (X * max_y + Y) could produce for large
+	# vocabularies where max_x * max_y > 2^63.
 	X_arr = np.asarray(X, dtype=np.int64)
 	Y_arr = np.asarray(Y, dtype=np.int64)
-	pair_ids = X_arr * max_y + Y_arr
-	unique_pairs, pair_counts = np.unique(pair_ids, return_counts=True)
-	pair_rows = (unique_pairs // max_y).astype(np.int64)
-	pair_cols = (unique_pairs % max_y).astype(np.int64)
+	sort_idx = np.lexsort((Y_arr, X_arr))
+	X_sorted = X_arr[sort_idx]
+	Y_sorted = Y_arr[sort_idx]
+	diff_mask = np.empty(len(X_sorted), dtype=np.bool_)
+	diff_mask[0] = True
+	diff_mask[1:] = (X_sorted[1:] != X_sorted[:-1]) | (Y_sorted[1:] != Y_sorted[:-1])
+	pair_rows = X_sorted[diff_mask].astype(np.int64)
+	pair_cols = Y_sorted[diff_mask].astype(np.int64)
+	boundaries = np.concatenate((np.where(diff_mask)[0], [len(X_sorted)]))
+	pair_counts = np.diff(boundaries)
 	XY = scipy.sparse.csc_matrix(
 		(pair_counts.astype(np.float64), (pair_rows, pair_cols)),
 		shape=(max_x, max_y))
