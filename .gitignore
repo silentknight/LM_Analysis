@@ -2,9 +2,12 @@
 *.html
 *.pyc
 *.so
-*.c
+*.pyd
 main
 run_script
+
+# Cython-generated C (lddcalc.c is auto-generated from lddcalc.pyx; scaling_laws.c is source)
+src/analysis/lddcalc.c
 
 # Data / experiment outputs
 *.save
@@ -14,6 +17,7 @@ run_script
 *.dat
 *.npz
 *.out
+*.tmp
 
 # Directories
 build/
@@ -35,6 +39,16 @@ env/
 # Environment files
 .env
 
-# OS artifacts
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Tool config (local only)
+.flake8
+setup.cfg
+
+# IDE / OS artifacts
 .DS_Store
 Thumbs.db
+.claude/

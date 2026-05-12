@@ -3,182 +3,256 @@
 import csv
 import numpy as np
 import scipy.special as spec
-import threading
 import os
-import array
-import scipy.sparse
+from multiprocessing import Process, Queue
+from multiprocessing.shared_memory import SharedMemory
 from tqdm import tqdm
-from . import lddcalc
+from . import lddcalc  # type: ignore[attr-defined]
 
 
-class MyThread(threading.Thread):
-	def __init__(self, d, overlap, log_type, method, data_array, line_length_list, total_length):
-		self.d = d
-		self.mi = 0.0
-		self.Hx = 0.0
-		self.Hy = 0.0
-		self.Hxy = 0.0
-		self.complete = False
-		self.overlap = overlap
-		self.method = method
-		self.log_type = log_type
-		self.data_array = data_array
-		self.line_length_list = line_length_list
-		self.total_length = total_length
-		super(MyThread, self).__init__()
+def _mi_worker(
+    shm_name,
+    corpus_shape,
+    line_length_list,
+    total_length,
+    d,
+    overlap,
+    log_type,
+    method,
+    q,
+):
+    """
+    Worker process: attaches to the shared-memory corpus (zero copy), computes
+    MI(d) via getJointCounts, and puts (d, mi, Hx, Hy, Hxy) into the queue.
+    Runs in a separate process so all CPU cores are used without GIL contention.
+    """
+    shm = SharedMemory(name=shm_name)
+    try:
+        corpus = np.ndarray(corpus_shape, dtype=np.uint64, buffer=shm.buf)
+        Ni_X, Ni_Y, Ni_XY = lddcalc.getJointCounts(
+            corpus, line_length_list, total_length, d, overlap
+        )
 
-	def run(self):
-		Ni_X, Ni_Y, Ni_XY, u_X, u_Y = lddcalc.getJointRV(
-			self.data_array, self.line_length_list, self.total_length, self.d, self.overlap)
+        if Ni_X is None:
+            q.put((d, None, None, None, None))
+            return
 
-		if Ni_X is None:
-			self.complete = True
-			return
+        if log_type == 0:
+            log_fn = np.log
+        elif log_type == 1:
+            log_fn = np.log2
+        else:
+            log_fn = np.log10
 
-		# Ni_X and Ni_Y are dense float64 arrays from getJointRV;
-		# Ni_XY is a CSC sparse matrix — extract non-zero counts
-		Ni_XY = Ni_XY.data
+        if method == "grassberger":
+            sum_X = np.sum(Ni_X)
+            sum_Y = np.sum(Ni_Y)
+            sum_XY = np.sum(Ni_XY)
+            Hx = log_fn(sum_X) - np.sum(Ni_X * spec.digamma(Ni_X)) / sum_X
+            Hy = log_fn(sum_Y) - np.sum(Ni_Y * spec.digamma(Ni_Y)) / sum_Y
+            Hxy = log_fn(sum_XY) - np.sum(Ni_XY * spec.digamma(Ni_XY)) / sum_XY
+            mi_val = Hx + Hy - Hxy
+        elif method == "standard":
+            px = Ni_X / np.sum(Ni_X)
+            py = Ni_Y / np.sum(Ni_Y)
+            pxy = Ni_XY / np.sum(Ni_XY)
+            Hx = -np.sum(px * log_fn(px))
+            Hy = -np.sum(py * log_fn(py))
+            Hxy = -np.sum(pxy * log_fn(pxy))
+            mi_val = Hx + Hy - Hxy
+        else:
+            q.put((d, None, None, None, None))
+            return
 
-		log = lambda val, base: np.log(val) if base == 0 else (np.log2(val) if base == 1 else np.log10(val))
-
-		if self.method == "grassberger":
-			sum_X = np.sum(Ni_X)
-			sum_Y = np.sum(Ni_Y)
-			sum_XY = np.sum(Ni_XY)
-			self.Hx = log(sum_X, self.log_type) - np.sum(Ni_X * spec.digamma(Ni_X)) / sum_X
-			self.Hy = log(sum_Y, self.log_type) - np.sum(Ni_Y * spec.digamma(Ni_Y)) / sum_Y
-			self.Hxy = log(sum_XY, self.log_type) - np.sum(Ni_XY * spec.digamma(Ni_XY)) / sum_XY
-			self.mi = self.Hx + self.Hy - self.Hxy
-		elif self.method == "standard":
-			px = Ni_X / np.sum(Ni_X)
-			py = Ni_Y / np.sum(Ni_Y)
-			pxy = Ni_XY / np.sum(Ni_XY)
-			self.Hx = -np.sum(px * log(px, self.log_type))
-			self.Hy = -np.sum(py * log(py, self.log_type))
-			self.Hxy = -np.sum(pxy * log(pxy, self.log_type))
-			self.mi = self.Hx + self.Hy - self.Hxy
+        q.put((d, float(mi_val), float(Hx), float(Hy), float(Hxy)))
+    except Exception:
+        q.put((d, None, None, None, None))
+    finally:
+        shm.close()
 
 
 class MutualInformation(object):
-	def __init__(self, corpusData, log_type, no_of_threads, data_file_path, overlap, method, cutoff):
-		self.corpus = corpusData
-		self.data_array = array.array('L', corpusData.sequentialData.dataArray)
-		self.line_length_list = np.array(corpusData.sequentialData.wordCountList, dtype=np.uint64)
-		self.total_length = corpusData.sequentialData.totalLength
-		self.no_of_threads = no_of_threads
-		self.filename = data_file_path
-		self.overlap = overlap
-		self.method = method
-		self.log_type = log_type
-		self.cutoff = cutoff
-		self.mutualInformation = self.calculate_MI()
+    def __init__(
+        self,
+        corpusData,
+        log_type,
+        no_of_threads,
+        data_file_path,
+        overlap,
+        method,
+        cutoff,
+    ):
+        self.corpus = corpusData
+        self.line_length_list = np.array(
+            corpusData.sequentialData.wordCountList, dtype=np.uint64
+        )
+        self.total_length = corpusData.sequentialData.totalLength
+        self.no_of_threads = no_of_threads
+        self.filename = data_file_path
+        self.overlap = overlap
+        self.method = method
+        self.log_type = log_type
+        self.cutoff = cutoff
 
-	def calculate_MI(self):
-		# Use Python lists for O(1) amortized append; convert to numpy at the end.
-		# np.append in a loop is O(n) per call → O(n²) over the full computation.
-		mi, Hx, Hy, Hxy = [], [], [], []
-		d = 1
+        # Copy corpus into shared memory once; worker processes attach zero-copy.
+        corpus_np = np.array(corpusData.sequentialData.dataArray, dtype=np.uint64)
+        self.corpus_shape = corpus_np.shape
+        self.shm = SharedMemory(create=True, size=max(corpus_np.nbytes, 1))
+        np.ndarray(corpus_np.shape, dtype=np.uint64, buffer=self.shm.buf)[:] = corpus_np
+        del corpus_np
 
-		print("Average String Length: ", int(self.corpus.sequentialData.averageLength))
-		print("Total String Length: ", int(self.corpus.sequentialData.totalLength))
+        try:
+            self.mutualInformation = self.calculate_MI()
+        finally:
+            self.shm.close()
+            self.shm.unlink()
 
-		# Load previously computed distances if the file exists
-		if os.path.exists(self.filename):
-			with open(self.filename, "r", newline='') as f:
-				reader = csv.reader(f)
-				try:
-					header = next(reader)
-					if len(header) >= 2 and header[0] == "data" and header[1] == self.corpus.datainfo:
-						next(reader)  # skip column header row
-						for row in reader:
-							if len(row) < 5:
-								print("Warning: skipping malformed row: " + str(row))
-								continue
-							try:
-								row_d = int(row[0])
-								# Pad any gaps to maintain positional invariant: mi[d-1] == value for d
-								while len(mi) < row_d - 1:
-									mi.append(float('nan'))
-									Hx.append(float('nan'))
-									Hy.append(float('nan'))
-									Hxy.append(float('nan'))
-								mi.append(float(row[1]))
-								Hx.append(float(row[2]))
-								Hy.append(float(row[3]))
-								Hxy.append(float(row[4]))
-								d = row_d + 1
-							except (IndexError, ValueError):
-								print("Warning: skipping malformed row: " + str(row))
-				except StopIteration:
-					pass
-		else:
-			print("File does not exist to load previous data")
+    def calculate_MI(self):
+        mi, Hx, Hy, Hxy = [], [], [], []
+        d = 1
 
-		end = False
+        print("Average String Length: ", int(self.corpus.sequentialData.averageLength))
+        print("Total String Length:   ", int(self.corpus.sequentialData.totalLength))
 
-		# Atomically rewrite existing data so the file is not left half-truncated on crash
-		tmp_path = self.filename + '.tmp'
-		with open(tmp_path, 'w', newline='') as f_tmp:
-			w = csv.writer(f_tmp)
-			w.writerow(["data", self.corpus.datainfo])
-			w.writerow(["d", "mi", "Hx", "Hy", "Hxy"])
-			for i in range(len(mi)):
-				if not np.isnan(mi[i]):
-					w.writerow([i + 1, mi[i], Hx[i], Hy[i], Hxy[i]])
-		os.replace(tmp_path, self.filename)
+        # Resume from previously saved file if it exists
+        if os.path.exists(self.filename):
+            with open(self.filename, "r", newline="") as f:
+                reader = csv.reader(f)
+                try:
+                    header = next(reader)
+                    if (
+                        len(header) >= 2
+                        and header[0] == "data"
+                        and header[1] == self.corpus.datainfo
+                    ):
+                        next(reader)  # skip column-header row
+                        for row in reader:
+                            if len(row) < 5:
+                                print("Warning: skipping malformed row: " + str(row))
+                                continue
+                            try:
+                                row_d = int(row[0])
+                                while len(mi) < row_d - 1:
+                                    mi.append(float("nan"))
+                                    Hx.append(float("nan"))
+                                    Hy.append(float("nan"))
+                                    Hxy.append(float("nan"))
+                                mi.append(float(row[1]))
+                                Hx.append(float(row[2]))
+                                Hy.append(float(row[3]))
+                                Hxy.append(float(row[4]))
+                                d = row_d + 1
+                            except (IndexError, ValueError):
+                                print("Warning: skipping malformed row: " + str(row))
+                except StopIteration:
+                    pass
+        else:
+            print("File does not exist to load previous data")
 
-		max_distance = self.total_length
-		total_d = min(self.cutoff, max_distance - 1)
-		if d > 1:
-			print(f"Resuming MI from d={d}")
+        # Atomically rewrite clean file (avoids truncation on crash)
+        tmp_path = self.filename + ".tmp"
+        with open(tmp_path, "w", newline="") as f_tmp:
+            w = csv.writer(f_tmp)
+            w.writerow(["data", self.corpus.datainfo])
+            w.writerow(["d", "mi", "Hx", "Hy", "Hxy"])
+            for i in range(len(mi)):
+                if not np.isnan(mi[i]):
+                    w.writerow([i + 1, mi[i], Hx[i], Hy[i], Hxy[i]])
+        os.replace(tmp_path, self.filename)
 
-		with open(self.filename, 'a', newline='') as f:
-			try:
-				with tqdm(total=total_d, initial=d - 1, desc="MI (LDD)",
-				          unit="d", dynamic_ncols=True) as pbar:
-					while d < max_distance and d <= self.cutoff and not end:
+        max_distance = self.total_length
+        total_d = min(self.cutoff, max_distance - 1)
+        if d > 1:
+            print(f"Resuming MI from d={d}")
 
-						# Pre-extend lists with placeholder zeros for this batch
-						mi.extend([0.0] * self.no_of_threads)
-						Hx.extend([0.0] * self.no_of_threads)
-						Hy.extend([0.0] * self.no_of_threads)
-						Hxy.extend([0.0] * self.no_of_threads)
+        end = False
+        procs = []
+        q = Queue()
 
-						thread = []
-						for i in range(self.no_of_threads):
-							thread.append(MyThread(
-								d + i, self.overlap, self.log_type, self.method,
-								self.data_array, self.line_length_list, self.total_length))
+        with open(self.filename, "a", newline="") as f:
+            try:
+                with tqdm(
+                    total=total_d,
+                    initial=d - 1,
+                    desc="MI (LDD)",
+                    unit="d",
+                    dynamic_ncols=True,
+                ) as pbar:
+                    while d < max_distance and d <= self.cutoff and not end:
 
-						for i in range(self.no_of_threads):
-							thread[i].start()
+                        mi.extend([0.0] * self.no_of_threads)
+                        Hx.extend([0.0] * self.no_of_threads)
+                        Hy.extend([0.0] * self.no_of_threads)
+                        Hxy.extend([0.0] * self.no_of_threads)
 
-						for i in range(self.no_of_threads):
-							thread[i].join()
+                        # Launch one process per distance in this batch
+                        procs = [
+                            Process(
+                                target=_mi_worker,
+                                args=(
+                                    self.shm.name,
+                                    self.corpus_shape,
+                                    self.line_length_list,
+                                    self.total_length,
+                                    d + i,
+                                    self.overlap,
+                                    self.log_type,
+                                    self.method,
+                                    q,
+                                ),
+                                daemon=True,
+                            )
+                            for i in range(self.no_of_threads)
+                        ]
+                        for p in procs:
+                            p.start()
 
-						for i in range(self.no_of_threads):
-							if thread[i].complete or np.isnan(thread[i].mi):
-								end = True
-								# Trim trailing placeholder slots (O(1) list pop vs O(n) np.delete)
-								threads_remaining = self.no_of_threads - i
-								for _ in range(threads_remaining):
-									if mi and mi[-1] == 0.0:
-										del mi[-1]; del Hx[-1]; del Hy[-1]; del Hxy[-1]
-								break
+                        # Collect results — workers may finish out of order
+                        results = {}
+                        for _ in range(self.no_of_threads):
+                            res = q.get()
+                            results[res[0]] = res[1:]  # keyed by distance
 
-							mi[d + i - 1] = thread[i].mi
-							Hx[d + i - 1] = thread[i].Hx
-							Hy[d + i - 1] = thread[i].Hy
-							Hxy[d + i - 1] = thread[i].Hxy
+                        for p in procs:
+                            p.join()
 
-							csv.writer(f).writerow(
-							    [d + i, mi[d + i - 1], Hx[d + i - 1], Hy[d + i - 1], Hxy[d + i - 1]])
-							pbar.set_postfix(d=d + i, mi=f"{thread[i].mi:.4f}")
-							pbar.update(1)
+                        # Process results in ascending distance order
+                        for i in range(self.no_of_threads):
+                            res = results.get(d + i, (None, None, None, None))
+                            if res[0] is None or np.isnan(res[0]):
+                                end = True
+                                threads_remaining = self.no_of_threads - i
+                                for _ in range(threads_remaining):
+                                    if mi and mi[-1] == 0.0:
+                                        del mi[-1]
+                                        del Hx[-1]
+                                        del Hy[-1]
+                                        del Hxy[-1]
+                                break
 
-						d += self.no_of_threads
+                            mi[d + i - 1] = res[0]
+                            Hx[d + i - 1] = res[1]
+                            Hy[d + i - 1] = res[2]
+                            Hxy[d + i - 1] = res[3]
 
-			except KeyboardInterrupt:
-				print(f"\nInterrupted at d={d - 1}")
+                            csv.writer(f).writerow(
+                                [
+                                    d + i,
+                                    mi[d + i - 1],
+                                    Hx[d + i - 1],
+                                    Hy[d + i - 1],
+                                    Hxy[d + i - 1],
+                                ]
+                            )
+                            f.flush()
+                            pbar.set_postfix(d=d + i, mi=f"{res[0]:.4f}")
+                            pbar.update(1)
 
-		return np.array(mi), np.array(Hx), np.array(Hy), np.array(Hxy)
+                        d += self.no_of_threads
+
+            except KeyboardInterrupt:
+                print(f"\nInterrupted at d={d - 1}")
+                for p in procs:
+                    p.terminate()
+
+        return np.array(mi), np.array(Hx), np.array(Hy), np.array(Hxy)
