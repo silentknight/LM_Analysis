@@ -36,7 +36,7 @@ class Recurrence(object):
             if len(positions) > 1:
                 gaps = np.diff(positions)
                 return np.array(np.unique(gaps, return_counts=True))
-            return []
+            return np.empty((2, 0), dtype=np.uint64)
 
         recurrenceList = {}
         try:

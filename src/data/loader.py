@@ -528,11 +528,11 @@ class SequentialData(object):
 
 
 class Corpus(object):
-    def __init__(self, path, ifwords):
+    def __init__(self, path, tokenizer):
         self.dictionary = Dictionary()
         self.sequentialData = SequentialData()
         self.datainfo = path
-        self.ifwords = ifwords
+        self.tokenizer = tokenizer
         self.completion = self.choose_dataset(self.datainfo)
         print("Total Length: {0}".format(self.sequentialData.totalLength))
 
@@ -561,13 +561,7 @@ class Corpus(object):
         print(path)
         with open(path, "r", encoding="utf-8") as f:
             for line in f:
-                if self.ifwords == 1:
-                    words = line.split() + ["<eos>"]
-                else:
-                    # Replace <unk> with a sentinel that cannot appear as a real char
-                    words = list(line.strip().replace("<unk>", "\x00")) + [" "]
-
-                for word in words:
+                for word in self.tokenizer.tokenize(line):
                     wordID = self.dictionary.add_word(word)
                     self.sequentialData.add_to_list(wordID)
         self.sequentialData.add_data()

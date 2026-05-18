@@ -218,6 +218,16 @@ class MutualInformation(object):
 
                         # Process results in ascending distance order
                         for i in range(self.no_of_threads):
+                            if d + i > self.cutoff:
+                                threads_remaining = self.no_of_threads - i
+                                for _ in range(threads_remaining):
+                                    if mi and mi[-1] == 0.0:
+                                        del mi[-1]
+                                        del Hx[-1]
+                                        del Hy[-1]
+                                        del Hxy[-1]
+                                end = True
+                                break
                             res = results.get(d + i, (None, None, None, None))
                             if res[0] is None or np.isnan(res[0]):
                                 end = True

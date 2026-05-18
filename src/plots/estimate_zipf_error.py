@@ -12,7 +12,9 @@ Usage:
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_PLOTS_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _PLOTS_DIR)
+sys.path.insert(0, os.path.dirname(_PLOTS_DIR))
 
 import argparse
 
@@ -20,14 +22,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-from plot_utils import powerlaw, fit_powerlaw, SEABORN_STYLE
-
-
-def load_zipf(path):
-    with np.load(path) as arr:
-        if "ids" in arr:
-            return arr["ids"], arr["frequency"]
-        return arr["arr_0"], arr["arr_1"]
+from utils.loaders import load_zipf
+from utils.math_utils import powerlaw, fit_powerlaw
+from plot_utils import SEABORN_STYLE
 
 
 def main():

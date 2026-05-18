@@ -31,6 +31,10 @@ A toolkit for measuring complex system properties of language modeling datasets.
     │   ├── speedup.pyx  # Cython extension for fast joint RV computation
     │   └── scaling_laws.c       # C implementation of Heap's / Taylor's / Ebeling's laws
     │
+    ├── utils/           # Shared utilities
+    │   ├── loaders.py   # Loaders for experiment output files (npz, csv)
+    │   └── math_utils.py  # Power law fitting and evaluation
+    │
     └── plots/           # Visualisation and error estimation
         ├── plot_all.py  # Plot all analysis types
         ├── plot_utils.py
@@ -102,7 +106,8 @@ python run_all.py --data dataset/ptb/.full --save_path ptb_full --processes heap
 
 ## Output Files
 
-All outputs are written under `experiments/`:
+All outputs are written under `experiments/<tokenizer>/` (e.g. `experiments/word/` or `experiments/char/`).
+Override with `--experiments_dir`.
 
 | Directory | File | Format |
 |---|---|---|

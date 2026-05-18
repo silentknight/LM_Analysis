@@ -42,6 +42,9 @@ class MyThread(threading.Thread):
             self.complete = True
             return
 
+        if self.method not in ("standard",):
+            raise ValueError(f"Unknown PMI method: {self.method!r}")
+
         if self.method == "standard":
             P_XY = Ni_XY / np.sum(Ni_XY)
             # getStandardPMI indexes px/py using raw vocab IDs (P_XY.row / P_XY.col),

@@ -23,21 +23,13 @@ Usage example:
 
 import argparse
 import os
-import pickle
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
 import numpy as np
 
-
-def load_zipf(path):
-    with np.load(path) as arr:
-        if "ids" in arr:
-            return arr["ids"].copy(), arr["frequency"].copy()
-        return arr["arr_0"].copy(), arr["arr_1"].copy()
-
-
-def load_corpus(path):
-    with open(path, "rb") as f:
-        return pickle.load(f)
+from utils.loaders import load_zipf, load_corpus
 
 
 def reorder_to_train(train_ids, train_corpus, test_ids, test_corpus):

@@ -10,89 +10,25 @@ Examples:
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_PLOTS_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _PLOTS_DIR)
+sys.path.insert(0, os.path.dirname(_PLOTS_DIR))
 
 import argparse
-import csv
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from datasets import DATASETS
+from utils.loaders import load_ldd, load_zipf, load_heaps, load_ebelings, load_taylors
+from utils.math_utils import powerlaw, fit_powerlaw
 from plot_utils import (
     SEABORN_STYLE,
-    powerlaw,
-    fit_powerlaw,
     apply_plot_style,
     group_output_name,
     label_for,
     is_train_split,
 )
-
-# ---------------------------------------------------------------------------
-# Loaders
-# ---------------------------------------------------------------------------
-
-
-def _load_ldd(path):
-    d_vals, mi_vals = [], []
-    with open(path, "r", newline="") as f:
-        reader = csv.reader(f)
-        next(reader)  # data/info header
-        next(reader)  # column header (d, mi, Hx, Hy, Hxy)
-        for row in reader:
-            if row:
-                d_vals.append(int(row[0]))
-                mi_vals.append(float(row[1]))
-    return np.array(d_vals), np.array(mi_vals)
-
-
-def _load_zipf(path):
-    with np.load(path) as arr:
-        if "ids" in arr:
-            return arr["ids"], arr["frequency"]
-        return arr["arr_0"], arr["arr_1"]
-
-
-def _load_heaps(path):
-    with open(path, "r") as f:
-        content = f.read()
-    return np.array([int(v) for v in content.split(",") if v.strip()])
-
-
-def _load_ebelings(path):
-    subseq_lens, variances = [], []
-    with open(path, "r") as f:
-        content = f.read()
-    for field in content.split(","):
-        field = field.strip()
-        if not field:
-            continue
-        parts = field.split(":")
-        subseq_lens.append(float(parts[0]))
-        variances.append(float(parts[1]))
-    return np.array(subseq_lens), np.array(variances)
-
-
-def _load_taylors(path, target_subseq_len):
-    means, sds = [], []
-    with open(path, "r") as f:
-        lines = f.readlines()
-    i = 0
-    while i < len(lines) - 2:
-        try:
-            subseq_len = int(lines[i].strip())
-        except ValueError:
-            i += 1
-            continue
-        if subseq_len == target_subseq_len:
-            means = [float(v) for v in lines[i + 1].split(",") if v.strip()]
-            sds = [float(v) for v in lines[i + 2].split(",") if v.strip()]
-        i += 3
-    if not means:
-        return None, None
-    return np.array(means), np.array(sds)
-
 
 # ---------------------------------------------------------------------------
 # Per-type plot functions  (one group → one saved figure)
@@ -107,7 +43,7 @@ def _plot_ldds(group, exp_dir, out_dir, **_):
         path = os.path.join(ldd_dir, name + ".csv")
         if not os.path.exists(path):
             continue
-        d_vals, mi_vals = _load_ldd(path)
+        d_vals, mi_vals = load_ldd(path)
         data[name] = (d_vals, mi_vals)
         x_lim = max(x_lim, len(d_vals))
     if not data:
@@ -149,7 +85,7 @@ def _plot_zipf(group, exp_dir, out_dir, **_):
             path = os.path.join(zipf_dir, name + ".npz")
             if not os.path.exists(path):
                 continue
-            ids, frequency = _load_zipf(path)
+            ids, frequency = load_zipf(path)
             xdata = np.arange(1, len(ids) + 1)
             lbl = label_for(name, group)
             n_fit = min(FIT_POINTS, len(xdata))
@@ -167,7 +103,7 @@ def _plot_zipf(group, exp_dir, out_dir, **_):
                 )
                 fit_ydata = powerlaw(xdata.astype(float), amp, index)
                 diff = fit_ydata - frequency.astype(float)
-                denom = np.std(fit_ydata) * np.std(frequency)
+                denom = np.var(frequency.astype(float))
                 nmse = float(np.mean(diff**2) / denom) if denom != 0 else float("nan")
                 legend_label = f"{lbl} : α={round(index, 3)}, nmse={round(nmse, 3)}"
 
@@ -204,7 +140,7 @@ def _plot_heaps(group, exp_dir, out_dir, **_):
             path = os.path.join(heaps_dir, name + "_heaps.csv")
             if not os.path.exists(path):
                 continue
-            vocab_sizes = _load_heaps(path)
+            vocab_sizes = load_heaps(path)
             xdata = np.arange(1, len(vocab_sizes) + 1)
             n_fit = min(len(xdata), max(len(xdata) // 2, 1))
             amp, index, _ = fit_powerlaw(
@@ -249,7 +185,7 @@ def _plot_ebelings(group, exp_dir, out_dir, **_):
             path = os.path.join(ebelings_dir, name + "_ebelings.csv")
             if not os.path.exists(path):
                 continue
-            subseq_lens, variances = _load_ebelings(path)
+            subseq_lens, variances = load_ebelings(path)
             n_fit = min(FIT_POINTS, len(subseq_lens))
             amp, index, _ = fit_powerlaw(
                 subseq_lens, variances, pinit=[0, -1.0], n_points=n_fit
@@ -292,7 +228,7 @@ def _plot_taylors(group, exp_dir, out_dir, subseq_length=1000, **_):
             path = os.path.join(taylors_dir, name + "_taylors.csv")
             if not os.path.exists(path):
                 continue
-            means, sds = _load_taylors(path, subseq_length)
+            means, sds = load_taylors(path, subseq_length)
             if means is None:
                 continue
             amp, index, _ = fit_powerlaw(means, sds, pinit=[0, -1.0])

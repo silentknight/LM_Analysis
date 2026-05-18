@@ -3,6 +3,7 @@
 import os
 import sys
 import argparse
+import pickle
 import subprocess
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
@@ -52,9 +53,6 @@ def main():
         help="Allow overlaps between two independent substrings. 0=No, 1=Yes",
     )
     parser.add_argument(
-        "--granularity", type=int, default=1, help="How big is the spacing"
-    )
-    parser.add_argument(
         "--clear", type=int, default=0, help="Clear old LDD data file: 0=No, 1=Yes"
     )
     parser.add_argument(
@@ -62,6 +60,15 @@ def main():
         type=str,
         default="save_data",
         help="Base name for all output files",
+    )
+    parser.add_argument(
+        "--experiments_dir",
+        type=str,
+        default=None,
+        help=(
+            "Root directory for all outputs. "
+            "Defaults to experiments/<tokenizer_name>/ (e.g. experiments/word/)"
+        ),
     )
     parser.add_argument(
         "--processes",
@@ -74,7 +81,7 @@ def main():
         "--pmi_dir",
         type=str,
         default=None,
-        help="Output directory for PMI matrices (default: experiments/pmi/<save_path>)",
+        help="Output directory for PMI matrices (overrides default inside experiments_dir)",
     )
 
     args = parser.parse_args()
@@ -87,39 +94,38 @@ def main():
             " Valid paths are listed in src/data/loader.py"
         )
 
-    for d in [
-        "experiments/datasetInIDs",
-        "experiments/corpus",
-        "experiments/zipf",
-        "experiments/ldds",
-        "experiments/heaps",
-        "experiments/taylors",
-        "experiments/ebelings",
-        "experiments/recurrence",
-        "experiments/pmi",
+    tokenizer = data.from_ifwords(args.words)
+    exp_dir = args.experiments_dir or os.path.join("experiments", tokenizer.name)
+
+    for subdir in [
+        "datasetInIDs",
+        "corpus",
+        "zipf",
+        "ldds",
+        "heaps",
+        "taylors",
+        "ebelings",
+        "recurrence",
+        "pmi",
     ]:
-        os.makedirs(d, exist_ok=True)
+        os.makedirs(os.path.join(exp_dir, subdir), exist_ok=True)
 
     ###############################################################################
     # Load data (always required as input to all analyses)
     ###############################################################################
 
-    corpus = data.Corpus(args.data, args.words)
+    corpus = data.Corpus(args.data, tokenizer)
     np.savetxt(
-        "experiments/datasetInIDs/" + args.save_path + ".csv",
+        os.path.join(exp_dir, "datasetInIDs", args.save_path + ".csv"),
         np.asarray(corpus.sequentialData.dataArray, dtype=np.uint32),
         fmt="%d",
     )
 
-    import pickle
-
-    fileObject = open("experiments/corpus/" + args.save_path + "_corpus.dat", "wb")
-    pickle.dump(corpus, fileObject)
-    fileObject.close()
-
-    fileObject = open("experiments/corpus/" + args.save_path + "_corpus.dat", "rb")
-    _ = pickle.load(fileObject)
-    fileObject.close()
+    corpus_path = os.path.join(exp_dir, "corpus", args.save_path + "_corpus.dat")
+    with open(corpus_path, "wb") as f:
+        pickle.dump(corpus, f)
+    with open(corpus_path, "rb") as f:
+        _ = pickle.load(f)
 
     print("Corpus loaded")
 
@@ -130,7 +136,7 @@ def main():
     ranked = corpus.dictionary.counter.most_common()
     IDs, frequency = zip(*ranked) if ranked else ([], [])
     np.savez_compressed(
-        "experiments/zipf/" + args.save_path,
+        os.path.join(exp_dir, "zipf", args.save_path),
         ids=np.asarray(IDs),
         frequency=np.asarray(frequency),
     )
@@ -141,7 +147,7 @@ def main():
     ###############################################################################
 
     if "mi" in args.processes:
-        ldd_path = "experiments/ldds/" + args.save_path + ".csv"
+        ldd_path = os.path.join(exp_dir, "ldds", args.save_path + ".csv")
         if args.clear == 1:
             try:
                 os.remove(ldd_path)
@@ -165,7 +171,7 @@ def main():
     if "pmi" in args.processes:
         from analysis import pmi as pmi_mod
 
-        pmi_dir = args.pmi_dir or os.path.join("experiments/pmi", args.save_path)
+        pmi_dir = args.pmi_dir or os.path.join(exp_dir, "pmi", args.save_path)
         os.makedirs(pmi_dir, exist_ok=True)
         pmi_mod.PointwiseMutualInformation(
             corpus,
@@ -196,7 +202,7 @@ def main():
             else:
                 print("Compiled src/analysis/scaling_laws.c")
         if os.path.exists(binary):
-            subprocess.run([binary, args.save_path, "experiments"])
+            subprocess.run([binary, args.save_path, exp_dir])
             print("Heaps, Taylors, Ebelings Computed")
 
     ###############################################################################
@@ -207,7 +213,7 @@ def main():
         from analysis import recurrence as rec_mod
 
         recur = rec_mod.Recurrence(corpus, args.threads)
-        rec_path = "experiments/recurrence/" + args.save_path + ".npz"
+        rec_path = os.path.join(exp_dir, "recurrence", args.save_path + ".npz")
         np.savez_compressed(
             rec_path, **{str(k): v for k, v in recur.recurrenceList.items()}
         )

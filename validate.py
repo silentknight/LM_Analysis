@@ -23,6 +23,7 @@ import subprocess
 import numpy as np
 
 BASELINE_DIR = "baseline"
+EXPERIMENTS_DIR = "experiments"
 
 # Tolerances per output type.
 # rel_tol: max(|new-ref|/|ref|) allowed
@@ -205,11 +206,11 @@ def cmp_ebelings(new_path, ref_path, abs_tol=1e-4, rel_tol=0.01, **_):
 
 def cmp_recurrence(new_path, ref_path, **_):
     def total_tokens(p):
-        r = np.load(p, allow_pickle=True)
+        r = np.load(p)
         total = 0
         for k in r.keys():
             v = r[k]
-            total += int(np.sum(v[1])) + 1 if v.size > 0 else 1
+            total += int(np.sum(v[1])) + 1
         return total
 
     nt = total_tokens(new_path)
@@ -222,41 +223,42 @@ def cmp_recurrence(new_path, ref_path, **_):
 # ---------------------------------------------------------------------------
 
 
-def manifest(sp):
+def manifest(sp, experiments_dir=None):
+    d = experiments_dir or EXPERIMENTS_DIR
     return [
         (
             "datasetInIDs",
-            f"experiments/datasetInIDs/{sp}.csv",
+            os.path.join(d, "datasetInIDs", f"{sp}.csv"),
             "datasetInIDs",
             f"{sp}.csv",
             cmp_dataset_ids,
         ),
-        ("zipf", f"experiments/zipf/{sp}.npz", "zipf", f"{sp}.npz", cmp_zipf),
-        ("ldds", f"experiments/ldds/{sp}.csv", "ldds", f"{sp}.csv", cmp_ldd_csv),
+        ("zipf", os.path.join(d, "zipf", f"{sp}.npz"), "zipf", f"{sp}.npz", cmp_zipf),
+        ("ldds", os.path.join(d, "ldds", f"{sp}.csv"), "ldds", f"{sp}.csv", cmp_ldd_csv),
         (
             "heaps",
-            f"experiments/heaps/{sp}_heaps.csv",
+            os.path.join(d, "heaps", f"{sp}_heaps.csv"),
             "heaps",
             f"{sp}_heaps.csv",
             cmp_heaps,
         ),
         (
             "taylors",
-            f"experiments/taylors/{sp}_taylors.csv",
+            os.path.join(d, "taylors", f"{sp}_taylors.csv"),
             "taylors",
             f"{sp}_taylors.csv",
             cmp_taylors,
         ),
         (
             "ebelings",
-            f"experiments/ebelings/{sp}_ebelings.csv",
+            os.path.join(d, "ebelings", f"{sp}_ebelings.csv"),
             "ebelings",
             f"{sp}_ebelings.csv",
             cmp_ebelings,
         ),
         (
             "recurrence",
-            f"experiments/recurrence/{sp}.npz",
+            os.path.join(d, "recurrence", f"{sp}.npz"),
             "recurrence",
             f"{sp}.npz",
             cmp_recurrence,
@@ -273,7 +275,7 @@ def cmd_save(args):
     sp = args.save_path
     print(f"Saving baseline for '{sp}' → {_bdir(sp)}/")
     saved = 0
-    for name, src, subdir, fname, _ in manifest(sp):
+    for name, src, subdir, fname, _ in manifest(sp, args.experiments_dir):
         dst = _bpath(sp, subdir, fname)
         if os.path.exists(src):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -324,7 +326,7 @@ def cmd_check(args):
     tol = TOLERANCES
     print(f"Comparing against baseline '{bdir}/'")
     all_pass = True
-    for name, src, subdir, fname, cmp_fn in manifest(sp):
+    for name, src, subdir, fname, cmp_fn in manifest(sp, args.experiments_dir):
         ref_path = _bpath(sp, subdir, fname)
         if not os.path.exists(ref_path):
             print(f"  [SKIP] {name}: not in baseline")
@@ -365,10 +367,19 @@ def main():
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    _exp_dir_kwargs = dict(
+        default=None,
+        help=(
+            "Root experiments directory to read outputs from "
+            "(default: experiments/<tokenizer_name>, e.g. experiments/word)"
+        ),
+    )
+
     p_save = sub.add_parser(
         "save", help="Save current experiments/ outputs as baseline"
     )
     p_save.add_argument("--save_path", required=True)
+    p_save.add_argument("--experiments_dir", **_exp_dir_kwargs)
     p_save.add_argument(
         "--run_cmd",
         default="",
@@ -379,6 +390,7 @@ def main():
         "check", help="Re-run analysis and compare against baseline"
     )
     p_check.add_argument("--save_path", required=True)
+    p_check.add_argument("--experiments_dir", **_exp_dir_kwargs)
     p_check.add_argument(
         "--skip_run",
         action="store_true",
