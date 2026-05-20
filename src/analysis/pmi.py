@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 
-import numpy as np
-import threading
-import os
 import array
+import os
+import threading
+
+import numpy as np
 import scipy.sparse as sp
 from tqdm import tqdm
+
 from . import lddcalc  # type: ignore[attr-defined]
 
 
 class MyThread(threading.Thread):
-    def __init__(
-        self, d, overlap, log_type, method, data_array, line_length_list, total_length
-    ):
+    def __init__(self, d, overlap, log_type, method, data_array, line_length_list, total_length):
         self.d = d
         self.Ni_X = 0
         self.Ni_Y = 0
@@ -42,9 +42,6 @@ class MyThread(threading.Thread):
             self.complete = True
             return
 
-        if self.method not in ("standard",):
-            raise ValueError(f"Unknown PMI method: {self.method!r}")
-
         if self.method == "standard":
             P_XY = Ni_XY / np.sum(Ni_XY)
             # getStandardPMI indexes px/py using raw vocab IDs (P_XY.row / P_XY.col),
@@ -67,9 +64,7 @@ class MyThread(threading.Thread):
                 np.uint64(P_Y.size),
                 self.log_type,
             )
-            self.pmi = sp.coo_matrix(
-                (pmi_data, (P_XY.row, P_XY.col)), shape=P_XY.shape
-            ).tocsc()
+            self.pmi = sp.coo_matrix((pmi_data, (P_XY.row, P_XY.col)), shape=P_XY.shape).tocsc()
             self.Ni_X = Ni_X
             self.Ni_Y = Ni_Y
             self.Ni_XY = Ni_XY
@@ -88,9 +83,7 @@ class PointwiseMutualInformation(object):
     ):
         self.corpus = corpusData
         self.data_array = array.array("L", corpusData.sequentialData.dataArray)
-        self.line_length_list = np.array(
-            corpusData.sequentialData.wordCountList, dtype=np.uint64
-        )
+        self.line_length_list = np.array(corpusData.sequentialData.wordCountList, dtype=np.uint64)
         self.total_length = corpusData.sequentialData.totalLength
         self.no_of_threads = no_of_threads
         self.directory = data_file_path
@@ -98,6 +91,8 @@ class PointwiseMutualInformation(object):
         self.method = method
         self.log_type = log_type
         self.cutoff = cutoff
+        if method not in ("standard",):
+            raise ValueError(f"Unknown PMI method: {method!r}")
         self.pointwiseMutualInformation = self.calculate_PMI()
 
     def calculate_PMI(self):
@@ -116,9 +111,7 @@ class PointwiseMutualInformation(object):
             if d_nums:
                 d = max(d_nums) + 1
         except (FileNotFoundError, OSError, ValueError, IndexError):
-            print(
-                self.directory + " does not exist or cannot be loaded; starting fresh."
-            )
+            print(self.directory + " does not exist or cannot be loaded; starting fresh.")
 
         with open(os.path.join(self.directory, "0.symbols.csv"), "w") as f:
             f.write("word,id\n")
@@ -160,6 +153,9 @@ class PointwiseMutualInformation(object):
                         thread[i].join()
 
                     for i in range(self.no_of_threads):
+                        if d + i > self.cutoff:
+                            end = True
+                            break
                         if thread[i].complete:
                             end = True
                             break

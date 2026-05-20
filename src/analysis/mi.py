@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
 import csv
-import numpy as np
-import scipy.special as spec
 import os
 from multiprocessing import Process, Queue
 from multiprocessing.shared_memory import SharedMemory
+
+import numpy as np
+import scipy.special as spec
 from tqdm import tqdm
+
 from . import lddcalc  # type: ignore[attr-defined]
 
 
@@ -83,9 +85,7 @@ class MutualInformation(object):
         cutoff,
     ):
         self.corpus = corpusData
-        self.line_length_list = np.array(
-            corpusData.sequentialData.wordCountList, dtype=np.uint64
-        )
+        self.line_length_list = np.array(corpusData.sequentialData.wordCountList, dtype=np.uint64)
         self.total_length = corpusData.sequentialData.totalLength
         self.no_of_threads = no_of_threads
         self.filename = data_file_path
@@ -210,7 +210,11 @@ class MutualInformation(object):
                         # Collect results — workers may finish out of order
                         results = {}
                         for _ in range(self.no_of_threads):
-                            res = q.get()
+                            try:
+                                res = q.get(timeout=600)
+                            except Exception:
+                                end = True
+                                break
                             results[res[0]] = res[1:]  # keyed by distance
 
                         for p in procs:

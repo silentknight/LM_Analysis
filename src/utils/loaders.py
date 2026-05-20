@@ -1,5 +1,6 @@
 import csv
 import pickle
+
 import numpy as np
 
 
@@ -38,6 +39,8 @@ def load_ebelings(path):
         if not field:
             continue
         parts = field.split(":")
+        if len(parts) != 2:
+            raise ValueError(f"Malformed ebelings field (expected 'n:v'): {field!r}")
         subseq_lens.append(float(parts[0]))
         variances.append(float(parts[1]))
     return np.array(subseq_lens), np.array(variances)

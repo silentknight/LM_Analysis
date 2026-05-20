@@ -1,0 +1,19 @@
+[tool.black]
+line-length = 99
+target-version = ["py38", "py39", "py310", "py311"]
+
+[tool.ruff]
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E402",  # module-level import not at top — intentional sys.path manipulation in plot scripts
+    "E501",  # line too long — black enforces line length; registry data is intentionally wide
+]
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.mypy-analysis.lddcalc]
+ignore_errors = true

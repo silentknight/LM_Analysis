@@ -4,7 +4,7 @@ Baseline validation tool.
 
 Save current experiments as a named baseline:
     python validate.py save --save_path ptb_full \
-        --run_cmd "python -u run_all.py --data dataset/ptb/.full --words 1 ..."
+        --run_cmd "python -u run_all.py --data dataset/text/english/ptb/.full --tokenizer word ..."
 
 Check (re-runs stored command then compares against baseline):
     python validate.py check --save_path ptb_full
@@ -14,11 +14,12 @@ Check without re-running (compare existing outputs only):
 """
 
 import argparse
-import os
-import sys
 import csv
+import glob
+import os
 import shutil
 import subprocess
+import sys
 
 import numpy as np
 
@@ -108,9 +109,7 @@ def cmp_ldd_csv(new_path, ref_path, abs_tol=1e-10, **_):
             r = csv.reader(f)
             next(r)
             next(r)
-            return {
-                int(row[0]): [float(x) for x in row[1:5]] for row in r if len(row) >= 5
-            }
+            return {int(row[0]): [float(x) for x in row[1:5]] for row in r if len(row) >= 5}
 
     new = load(new_path)
     ref = load(ref_path)
@@ -271,11 +270,36 @@ def manifest(sp, experiments_dir=None):
 # ---------------------------------------------------------------------------
 
 
+def _resolve_exp_dir(args):
+    if args.experiments_dir:
+        return args.experiments_dir
+    parts = [
+        args.data_type or "*",
+        args.language or "*",
+        args.tokenizer or "*",
+    ]
+    pattern = os.path.join("experiments", *parts)
+    if "*" not in pattern:
+        return pattern
+    matches = [m for m in glob.glob(pattern) if os.path.isdir(m)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        print(
+            f"Warning: --experiments_dir not set and pattern '{pattern}' matches "
+            f"multiple directories: {matches}. Pass --data_type, --language, "
+            f"--tokenizer, or --experiments_dir to select one."
+        )
+        sys.exit(1)
+    # No match found — return the pattern so downstream code reports missing files
+    return pattern
+
+
 def cmd_save(args):
     sp = args.save_path
     print(f"Saving baseline for '{sp}' → {_bdir(sp)}/")
     saved = 0
-    for name, src, subdir, fname, _ in manifest(sp, args.experiments_dir):
+    for name, src, subdir, fname, _ in manifest(sp, _resolve_exp_dir(args)):
         dst = _bpath(sp, subdir, fname)
         if os.path.exists(src):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -326,7 +350,7 @@ def cmd_check(args):
     tol = TOLERANCES
     print(f"Comparing against baseline '{bdir}/'")
     all_pass = True
-    for name, src, subdir, fname, cmp_fn in manifest(sp, args.experiments_dir):
+    for name, src, subdir, fname, cmp_fn in manifest(sp, _resolve_exp_dir(args)):
         ref_path = _bpath(sp, subdir, fname)
         if not os.path.exists(ref_path):
             print(f"  [SKIP] {name}: not in baseline")
@@ -339,11 +363,7 @@ def cmd_check(args):
             ok, detail = cmp_fn(
                 src,
                 ref_path,
-                **{
-                    k: v
-                    for k, v in tol.get(name, {}).items()
-                    if k not in ("exact", "structural")
-                },
+                **{k: v for k, v in tol.get(name, {}).items() if k not in ("exact", "structural")},
             )
         except Exception as e:
             ok, detail = False, f"error: {e}"
@@ -362,35 +382,34 @@ def cmd_check(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Baseline validation for LM_Analysis outputs"
-    )
+    parser = argparse.ArgumentParser(description="Baseline validation for LM_Analysis outputs")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    _exp_dir_kwargs = dict(
-        default=None,
-        help=(
-            "Root experiments directory to read outputs from "
-            "(default: experiments/<tokenizer_name>, e.g. experiments/word)"
-        ),
-    )
+    def _add_path_args(p):
+        p.add_argument(
+            "--experiments_dir",
+            default=None,
+            help=(
+                "Root experiments directory (default: experiments/<data_type>/<language>/<tokenizer>). "
+                "Overrides --data_type, --language, and --tokenizer when set."
+            ),
+        )
+        p.add_argument("--data_type", default=None, help="e.g. text, code, image")
+        p.add_argument("--language", default=None, help="e.g. english, python, c")
+        p.add_argument("--tokenizer", default=None, help="e.g. word, char, bpe")
 
-    p_save = sub.add_parser(
-        "save", help="Save current experiments/ outputs as baseline"
-    )
+    p_save = sub.add_parser("save", help="Save current experiments/ outputs as baseline")
     p_save.add_argument("--save_path", required=True)
-    p_save.add_argument("--experiments_dir", **_exp_dir_kwargs)
+    _add_path_args(p_save)
     p_save.add_argument(
         "--run_cmd",
         default="",
         help="Command string to store and replay during 'check'",
     )
 
-    p_check = sub.add_parser(
-        "check", help="Re-run analysis and compare against baseline"
-    )
+    p_check = sub.add_parser("check", help="Re-run analysis and compare against baseline")
     p_check.add_argument("--save_path", required=True)
-    p_check.add_argument("--experiments_dir", **_exp_dir_kwargs)
+    _add_path_args(p_check)
     p_check.add_argument(
         "--skip_run",
         action="store_true",

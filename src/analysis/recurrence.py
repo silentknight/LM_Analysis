@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-import numpy as np
 from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
 from tqdm import tqdm
 
 
@@ -21,9 +22,7 @@ class Recurrence(object):
         # first element of each group is the word ID it belongs to
         unique_ids = sorted_ids[np.concatenate(([0], splits))]
 
-        self.position_index = [
-            np.empty(0, dtype=np.uint64) for _ in range(self.uniqueSize)
-        ]
+        self.position_index = [np.empty(0, dtype=np.uint64) for _ in range(self.uniqueSize)]
         for word_id, group in zip(unique_ids, groups):
             if word_id < self.uniqueSize:
                 self.position_index[word_id] = np.sort(group).astype(np.uint64)
@@ -50,9 +49,7 @@ class Recurrence(object):
                     unit="word",
                     dynamic_ncols=True,
                 ) as pbar:
-                    for i, result in enumerate(
-                        executor.map(compute, self.position_index)
-                    ):
+                    for i, result in enumerate(executor.map(compute, self.position_index)):
                         recurrenceList[i] = result
                         pbar.update(1)
         except KeyboardInterrupt:

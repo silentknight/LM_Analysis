@@ -18,13 +18,12 @@ sys.path.insert(0, os.path.dirname(_PLOTS_DIR))
 
 import argparse
 
-import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+import numpy as np
+from plot_utils import SEABORN_STYLE
 
 from utils.loaders import load_zipf
-from utils.math_utils import powerlaw, fit_powerlaw
-from plot_utils import SEABORN_STYLE
+from utils.math_utils import fit_powerlaw, powerlaw
 
 
 def main():
@@ -33,8 +32,11 @@ def main():
     )
     parser.add_argument(
         "--experiments_dir",
-        default="experiments",
-        help="Experiments root directory (default: experiments)",
+        required=True,
+        help=(
+            "Experiments root directory — must point to the leaf tokenizer folder, "
+            "e.g. experiments/text/english/word"
+        ),
     )
     parser.add_argument(
         "--save_paths",
@@ -42,9 +44,7 @@ def main():
         required=True,
         help="List of save-path names to evaluate",
     )
-    parser.add_argument(
-        "--show", action="store_true", help="Show interactive plot for each file"
-    )
+    parser.add_argument("--show", action="store_true", help="Show interactive plot for each file")
     args = parser.parse_args()
 
     zipf_dir = os.path.join(args.experiments_dir, "zipf")
@@ -64,8 +64,8 @@ def main():
         amp_err = np.sqrt(covar[0][0]) * amp if covar is not None else float("nan")
 
         fit_ydata = powerlaw(xdata, amp, index)
-        mse = mean_squared_error(ydata, fit_ydata)
-        mae = mean_absolute_error(ydata, fit_ydata)
+        mse = float(np.mean((ydata - fit_ydata) ** 2))
+        mae = float(np.mean(np.abs(ydata - fit_ydata)))
 
         print(
             f"{name}: index={index:.4f} ± {index_err:.4f}, "

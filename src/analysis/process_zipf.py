@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import numpy as np
 
-from utils.loaders import load_zipf, load_corpus
+from utils.loaders import load_corpus, load_zipf
 
 
 def reorder_to_train(train_ids, train_corpus, test_ids, test_corpus):
@@ -64,8 +64,11 @@ def main():
     )
     parser.add_argument(
         "--experiments_dir",
-        default="experiments",
-        help="Experiments root directory (default: experiments)",
+        required=True,
+        help=(
+            "Experiments root directory — must point to the leaf tokenizer folder, "
+            "e.g. experiments/text/english/word"
+        ),
     )
     parser.add_argument(
         "--train",
@@ -107,17 +110,13 @@ def main():
         test_ids, test_freq = load_zipf(zipf_path)
         test_corpus = load_corpus(corpus_path)
 
-        new_order, absent = reorder_to_train(
-            train_ids, train_corpus, test_ids, test_corpus
-        )
+        new_order, absent = reorder_to_train(train_ids, train_corpus, test_ids, test_corpus)
         out_ids = test_ids[new_order]
         out_freq = test_freq[new_order]
 
         out_path = os.path.join(zipf_dir, name + "_ordered.npz")
         np.savez_compressed(out_path, ids=out_ids, frequency=out_freq)
-        print(
-            f"{name}: reordered {len(new_order)} words, {absent} absent from test/valid"
-        )
+        print(f"{name}: reordered {len(new_order)} words, {absent} absent from test/valid")
 
 
 if __name__ == "__main__":

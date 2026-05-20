@@ -72,42 +72,42 @@ gcc -O2 -o src/analysis/scaling_laws src/analysis/scaling_laws.c -lm
 **Run the full analysis pipeline:**
 
 ```bash
-python -u run_all.py --data dataset/ptb/.full \
-                     --words 1 \
+python -u run_all.py --data dataset/text/english/ptb/.full \
+                     --save_path ptb_full \
+                     --tokenizer word \
                      --cutoff 1000 \
                      --threads 4 \
-                     --log_type 0 \
-                     --mi_method grassberger \
-                     --save_path ptb_full
+                     --log_base e \
+                     --mi_method grassberger
 ```
 
 | Argument | Description | Default |
 |---|---|---|
-| `--data` | Path to corpus file (see `data/loader.py`) | required |
-| `--words` | Tokenize on words (`1`) or characters (`0`) | `0` |
-| `--cutoff` | Maximum distance *d* for MI / PMI computation | `1000` |
-| `--mi_method` | `grassberger` or `standard` | `grassberger` |
-| `--log_type` | Log base: `0`=e, `1`=2, `2`=10 | `1` |
-| `--threads` | Number of parallel threads | `1` |
-| `--overlap` | Allow overlapping windows (`1`/`0`) | `1` |
-| `--save_path` | Output filename stem | `save_data` |
-| `--clear` | Clear existing LDD file before running (`1`/`0`) | `0` |
-| `--processes` | Analyses to run (space-separated subset of `mi pmi heaps recurrence`) | all |
+| `--data` | Registry key for the corpus (see `src/data/loader.py`) | **required** |
+| `--save_path` | Stem for all output filenames | **required** |
+| `--tokenizer` | Tokenizer: `word`, `char`, … (extensible) | `word` |
+| `--cutoff` | Maximum distance *d* for MI / PMI | `1000` |
+| `--mi_method` | Entropy estimator: `grassberger` or `standard` | `grassberger` |
+| `--log_base` | Log base for MI / PMI values: `e`, `2`, or `10` | `2` |
+| `--threads` | Parallel workers | `1` |
+| `--no_overlap` | Disallow overlapping token windows (flag) | off |
+| `--clear` | Delete existing LDD file before MI (flag) | off |
+| `--processes` | Analyses to run: `mi pmi heaps taylors ebelings recurrence` (`heaps`/`taylors`/`ebelings` share one C binary) | `mi heaps taylors ebelings recurrence` |
 
 **Run a subset of analyses:**
 
 ```bash
 # MI only
-python run_all.py --data dataset/ptb/.full --save_path ptb_full --processes mi
+python run_all.py --data dataset/text/english/ptb/.full --save_path ptb_full --processes mi
 
 # Heaps / Taylor's / Ebeling's only (auto-compiles scaling_laws.c if needed)
-python run_all.py --data dataset/ptb/.full --save_path ptb_full --processes heaps
+python run_all.py --data dataset/text/english/ptb/.full --save_path ptb_full --processes heaps taylors ebelings
 ```
 
 ## Output Files
 
-All outputs are written under `experiments/<tokenizer>/` (e.g. `experiments/word/` or `experiments/char/`).
-Override with `--experiments_dir`.
+All outputs are written under `experiments/<data_type>/<language>/<tokenizer>/`
+(e.g. `experiments/text/english/word/`). Override with `--experiments_dir`.
 
 | Directory | File | Format |
 |---|---|---|
@@ -126,16 +126,17 @@ Save a named baseline from the current outputs:
 
 ```bash
 python validate.py save --save_path ptb_full \
-    --run_cmd "python -u run_all.py --data dataset/ptb/.full --words 1 \
-               --threads 10 --log_type 0 --mi_method grassberger \
-               --overlap 1 --cutoff 100 --clear 1 --save_path ptb_full \
-               --processes mi heaps recurrence"
+    --experiments_dir experiments/text/english/word \
+    --run_cmd "python -u run_all.py --data dataset/text/english/ptb/.full --tokenizer word \
+               --threads 10 --log_base e --mi_method grassberger \
+               --cutoff 100 --clear --save_path ptb_full \
+               --processes mi heaps taylors ebelings recurrence"
 ```
 
 After making code changes, re-run and verify outputs stay within tolerance:
 
 ```bash
-python validate.py check --save_path ptb_full
+python validate.py check --save_path ptb_full --experiments_dir experiments/text/english/word
 ```
 
 Compare existing outputs without re-running:

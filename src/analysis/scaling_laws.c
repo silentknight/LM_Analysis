@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
 	fi = fopen(datasetFile, "r");
 	if(fi == NULL)
 	{
-		printf("No such file\n");
+		printf("Cannot open file: %s\n", datasetFile);
 		exit(0);
 	}
 
@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
 	fo = fopen(heapsFile, "w");
 	if(fo == NULL)
 	{
-		printf("No such file\n");
+		printf("Cannot open file: %s\n", heapsFile);
 		exit(0);
 	}
 

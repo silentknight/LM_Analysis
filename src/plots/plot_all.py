@@ -16,19 +16,19 @@ sys.path.insert(0, os.path.dirname(_PLOTS_DIR))
 
 import argparse
 
-import numpy as np
 import matplotlib.pyplot as plt
-
+import numpy as np
 from datasets import DATASETS
-from utils.loaders import load_ldd, load_zipf, load_heaps, load_ebelings, load_taylors
-from utils.math_utils import powerlaw, fit_powerlaw
 from plot_utils import (
     SEABORN_STYLE,
     apply_plot_style,
     group_output_name,
-    label_for,
     is_train_split,
+    label_for,
 )
+
+from utils.loaders import load_ebelings, load_heaps, load_ldd, load_taylors, load_zipf
+from utils.math_utils import fit_powerlaw, powerlaw
 
 # ---------------------------------------------------------------------------
 # Per-type plot functions  (one group → one saved figure)
@@ -91,16 +91,12 @@ def _plot_zipf(group, exp_dir, out_dir, **_):
             n_fit = min(FIT_POINTS, len(xdata))
 
             if is_train_split(name):
-                amp, index, _ = fit_powerlaw(
-                    xdata, frequency, pinit=[0, -1.0], n_points=n_fit
-                )
+                amp, index, _ = fit_powerlaw(xdata, frequency, pinit=[0, -1.0], n_points=n_fit)
                 train_index = index
                 legend_label = f"{lbl} : α={round(index, 3)}"
             else:
                 pinit = [0, train_index] if train_index is not None else [0, -1.0]
-                amp, index, _ = fit_powerlaw(
-                    xdata, frequency, pinit=pinit, n_points=n_fit
-                )
+                amp, index, _ = fit_powerlaw(xdata, frequency, pinit=pinit, n_points=n_fit)
                 fit_ydata = powerlaw(xdata.astype(float), amp, index)
                 diff = fit_ydata - frequency.astype(float)
                 denom = np.var(frequency.astype(float))
@@ -143,9 +139,7 @@ def _plot_heaps(group, exp_dir, out_dir, **_):
             vocab_sizes = load_heaps(path)
             xdata = np.arange(1, len(vocab_sizes) + 1)
             n_fit = min(len(xdata), max(len(xdata) // 2, 1))
-            amp, index, _ = fit_powerlaw(
-                xdata, vocab_sizes, pinit=[0, 0.5], n_points=n_fit
-            )
+            amp, index, _ = fit_powerlaw(xdata, vocab_sizes, pinit=[0, 0.5], n_points=n_fit)
             ax.loglog(
                 xdata,
                 vocab_sizes,
@@ -187,9 +181,7 @@ def _plot_ebelings(group, exp_dir, out_dir, **_):
                 continue
             subseq_lens, variances = load_ebelings(path)
             n_fit = min(FIT_POINTS, len(subseq_lens))
-            amp, index, _ = fit_powerlaw(
-                subseq_lens, variances, pinit=[0, -1.0], n_points=n_fit
-            )
+            amp, index, _ = fit_powerlaw(subseq_lens, variances, pinit=[0, -1.0], n_points=n_fit)
             ax.loglog(
                 subseq_lens,
                 variances,
@@ -273,9 +265,7 @@ PLOT_TYPES = {
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Plot complex-system properties of LM datasets"
-    )
+    parser = argparse.ArgumentParser(description="Plot complex-system properties of LM datasets")
     parser.add_argument(
         "--plots",
         nargs="+",
@@ -285,8 +275,11 @@ def main():
     )
     parser.add_argument(
         "--experiments_dir",
-        default="experiments",
-        help="Experiments root directory (default: experiments)",
+        required=True,
+        help=(
+            "Experiments root directory — must point to the leaf tokenizer folder, "
+            "e.g. experiments/text/english/word"
+        ),
     )
     parser.add_argument(
         "--output_dir", default="plots", help="Directory to save plots (default: plots)"
