@@ -1,17 +1,23 @@
 from .base import BaseTokenizer
+from .bpe import BpeTokenizer
 from .char import CharTokenizer
+from .midi import MidiTokenizer
 from .word import WordTokenizer
 
 # Maps tokenizer name → class.  Add new tokenizers here.
-_REGISTRY: dict = {
-    "word": WordTokenizer,
-    "char": CharTokenizer,
+_REGISTRY: dict[str, type[BaseTokenizer]] = {
+    "word":  WordTokenizer,
+    "char":  CharTokenizer,
+    "midi":  MidiTokenizer,
+    "bpe":   BpeTokenizer,
 }
 
 __all__ = [
     "BaseTokenizer",
     "WordTokenizer",
     "CharTokenizer",
+    "MidiTokenizer",
+    "BpeTokenizer",
     "_REGISTRY",
     "get_tokenizer",
     "from_ifwords",

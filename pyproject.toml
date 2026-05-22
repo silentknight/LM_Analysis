@@ -1,9 +1,76 @@
+[build-system]
+requires = ["setuptools>=61", "cython>=3.0", "numpy>=2.0"]
+build-backend = "setuptools.build_meta"
+
+# ---------------------------------------------------------------------------
+# Project metadata
+# ---------------------------------------------------------------------------
+
+[project]
+name = "lm-analysis"
+version = "0.1.0"
+description = "Complex-system and information-theoretic analysis of language model corpora"
+requires-python = ">=3.12"
+
+# Core — required for any run_all.py analysis
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.10",
+    "tqdm>=4.0",
+]
+
+[project.optional-dependencies]
+
+# Visualisation (src/plots/)
+plots = [
+    "matplotlib>=3.7",
+    "seaborn>=0.12",
+    "simplejson>=3.0",
+]
+
+# Dataset downloaders: multilingual Wikipedia + The Stack code corpora
+datasets = [
+    "datasets>=2.0",
+    "huggingface-hub>=0.16",
+]
+
+# BPE tokenizer (src/data/tokenizers/bpe.py, dataset/train_bpe.py)
+bpe = [
+    "tokenizers>=0.13",
+]
+
+# Music dataset (dataset/download_music.py)
+music = [
+    "pretty_midi>=0.2",
+]
+
+# Development tools
+dev = [
+    "black>=24.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+    "cython>=3.0",
+]
+
+# Everything at once
+all = [
+    "lm-analysis[plots,datasets,bpe,music]",
+]
+
+# ---------------------------------------------------------------------------
+# Tool configuration
+# ---------------------------------------------------------------------------
+
 [tool.black]
 line-length = 99
-target-version = ["py38", "py39", "py310", "py311"]
+target-version = ["py312"]
 
 [tool.ruff]
 line-length = 99
+exclude = [
+    "dataset/text",
+    "dataset/code",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

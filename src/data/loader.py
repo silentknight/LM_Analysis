@@ -178,6 +178,126 @@ _REGISTRY = {
     "dataset/text/bytes/ptb_text8/.valid":      ("ptb_text8 valid",       "text", "bytes", True,  [("valid", "valid.txt")]),
     "dataset/text/bytes/ptb_text8/.test":       ("ptb_text8 test",        "text", "bytes", True,  [("test",  "test.txt")]),
     "dataset/text/bytes/ptb_text8/train_small": ("ptb_text8 train small", "text", "bytes", False, [("train", None)]),
+
+    # -------------------------------------------------------------------------
+    # Natural language — multilingual Wikipedia (download_languages.py)
+    # -------------------------------------------------------------------------
+
+    "dataset/text/german/de_wiki/.full":    ("German Wikipedia full",    "text", "german",   True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/german/de_wiki/.train":   ("German Wikipedia train",   "text", "german",   True, [("train", "train")]),
+    "dataset/text/german/de_wiki/.valid":   ("German Wikipedia valid",   "text", "german",   True, [("valid", "valid")]),
+    "dataset/text/german/de_wiki/.test":    ("German Wikipedia test",    "text", "german",   True, [("test",  "test")]),
+
+    "dataset/text/spanish/es_wiki/.full":   ("Spanish Wikipedia full",   "text", "spanish",  True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/spanish/es_wiki/.train":  ("Spanish Wikipedia train",  "text", "spanish",  True, [("train", "train")]),
+    "dataset/text/spanish/es_wiki/.valid":  ("Spanish Wikipedia valid",  "text", "spanish",  True, [("valid", "valid")]),
+    "dataset/text/spanish/es_wiki/.test":   ("Spanish Wikipedia test",   "text", "spanish",  True, [("test",  "test")]),
+
+    "dataset/text/french/fr_wiki/.full":    ("French Wikipedia full",    "text", "french",   True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/french/fr_wiki/.train":   ("French Wikipedia train",   "text", "french",   True, [("train", "train")]),
+    "dataset/text/french/fr_wiki/.valid":   ("French Wikipedia valid",   "text", "french",   True, [("valid", "valid")]),
+    "dataset/text/french/fr_wiki/.test":    ("French Wikipedia test",    "text", "french",   True, [("test",  "test")]),
+
+    "dataset/text/russian/ru_wiki/.full":   ("Russian Wikipedia full",   "text", "russian",  True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/russian/ru_wiki/.train":  ("Russian Wikipedia train",  "text", "russian",  True, [("train", "train")]),
+    "dataset/text/russian/ru_wiki/.valid":  ("Russian Wikipedia valid",  "text", "russian",  True, [("valid", "valid")]),
+    "dataset/text/russian/ru_wiki/.test":   ("Russian Wikipedia test",   "text", "russian",  True, [("test",  "test")]),
+
+    "dataset/text/arabic/ar_wiki/.full":    ("Arabic Wikipedia full",    "text", "arabic",   True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/arabic/ar_wiki/.train":   ("Arabic Wikipedia train",   "text", "arabic",   True, [("train", "train")]),
+    "dataset/text/arabic/ar_wiki/.valid":   ("Arabic Wikipedia valid",   "text", "arabic",   True, [("valid", "valid")]),
+    "dataset/text/arabic/ar_wiki/.test":    ("Arabic Wikipedia test",    "text", "arabic",   True, [("test",  "test")]),
+
+    "dataset/text/finnish/fi_wiki/.full":   ("Finnish Wikipedia full",   "text", "finnish",  True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/finnish/fi_wiki/.train":  ("Finnish Wikipedia train",  "text", "finnish",  True, [("train", "train")]),
+    "dataset/text/finnish/fi_wiki/.valid":  ("Finnish Wikipedia valid",  "text", "finnish",  True, [("valid", "valid")]),
+    "dataset/text/finnish/fi_wiki/.test":   ("Finnish Wikipedia test",   "text", "finnish",  True, [("test",  "test")]),
+
+    "dataset/text/turkish/tr_wiki/.full":   ("Turkish Wikipedia full",   "text", "turkish",  True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/turkish/tr_wiki/.train":  ("Turkish Wikipedia train",  "text", "turkish",  True, [("train", "train")]),
+    "dataset/text/turkish/tr_wiki/.valid":  ("Turkish Wikipedia valid",  "text", "turkish",  True, [("valid", "valid")]),
+    "dataset/text/turkish/tr_wiki/.test":   ("Turkish Wikipedia test",   "text", "turkish",  True, [("test",  "test")]),
+
+    "dataset/text/chinese/zh_wiki/.full":   ("Chinese Wikipedia full",   "text", "chinese",  True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/chinese/zh_wiki/.train":  ("Chinese Wikipedia train",  "text", "chinese",  True, [("train", "train")]),
+    "dataset/text/chinese/zh_wiki/.valid":  ("Chinese Wikipedia valid",  "text", "chinese",  True, [("valid", "valid")]),
+    "dataset/text/chinese/zh_wiki/.test":   ("Chinese Wikipedia test",   "text", "chinese",  True, [("test",  "test")]),
+
+    "dataset/text/japanese/ja_wiki/.full":  ("Japanese Wikipedia full",  "text", "japanese", True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/japanese/ja_wiki/.train": ("Japanese Wikipedia train", "text", "japanese", True, [("train", "train")]),
+    "dataset/text/japanese/ja_wiki/.valid": ("Japanese Wikipedia valid", "text", "japanese", True, [("valid", "valid")]),
+    "dataset/text/japanese/ja_wiki/.test":  ("Japanese Wikipedia test",  "text", "japanese", True, [("test",  "test")]),
+
+    "dataset/text/hindi/hi_wiki/.full":     ("Hindi Wikipedia full",     "text", "hindi",    True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/hindi/hi_wiki/.train":    ("Hindi Wikipedia train",    "text", "hindi",    True, [("train", "train")]),
+    "dataset/text/hindi/hi_wiki/.valid":    ("Hindi Wikipedia valid",    "text", "hindi",    True, [("valid", "valid")]),
+    "dataset/text/hindi/hi_wiki/.test":     ("Hindi Wikipedia test",     "text", "hindi",    True, [("test",  "test")]),
+
+    "dataset/text/swahili/sw_wiki/.full":   ("Swahili Wikipedia full",   "text", "swahili",  True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/swahili/sw_wiki/.train":  ("Swahili Wikipedia train",  "text", "swahili",  True, [("train", "train")]),
+    "dataset/text/swahili/sw_wiki/.valid":  ("Swahili Wikipedia valid",  "text", "swahili",  True, [("valid", "valid")]),
+    "dataset/text/swahili/sw_wiki/.test":   ("Swahili Wikipedia test",   "text", "swahili",  True, [("test",  "test")]),
+
+    # -------------------------------------------------------------------------
+    # Code — The Stack (download_code.py)
+    # -------------------------------------------------------------------------
+
+    "dataset/code/python/python_stack/.full":      ("Python (The Stack) full",      "code", "python",     True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/code/python/python_stack/.train":     ("Python (The Stack) train",     "code", "python",     True, [("train", "train")]),
+    "dataset/code/python/python_stack/.valid":     ("Python (The Stack) valid",     "code", "python",     True, [("valid", "valid")]),
+    "dataset/code/python/python_stack/.test":      ("Python (The Stack) test",      "code", "python",     True, [("test",  "test")]),
+
+    "dataset/code/javascript/js_stack/.full":      ("JavaScript (The Stack) full",  "code", "javascript", True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/code/javascript/js_stack/.train":     ("JavaScript (The Stack) train", "code", "javascript", True, [("train", "train")]),
+    "dataset/code/javascript/js_stack/.valid":     ("JavaScript (The Stack) valid", "code", "javascript", True, [("valid", "valid")]),
+    "dataset/code/javascript/js_stack/.test":      ("JavaScript (The Stack) test",  "code", "javascript", True, [("test",  "test")]),
+
+    "dataset/code/c/c_stack/.full":                ("C (The Stack) full",           "code", "c",          True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/code/c/c_stack/.train":               ("C (The Stack) train",          "code", "c",          True, [("train", "train")]),
+    "dataset/code/c/c_stack/.valid":               ("C (The Stack) valid",          "code", "c",          True, [("valid", "valid")]),
+    "dataset/code/c/c_stack/.test":                ("C (The Stack) test",           "code", "c",          True, [("test",  "test")]),
+
+    "dataset/code/haskell/haskell_stack/.full":    ("Haskell (The Stack) full",     "code", "haskell",    True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/code/haskell/haskell_stack/.train":   ("Haskell (The Stack) train",    "code", "haskell",    True, [("train", "train")]),
+    "dataset/code/haskell/haskell_stack/.valid":   ("Haskell (The Stack) valid",    "code", "haskell",    True, [("valid", "valid")]),
+    "dataset/code/haskell/haskell_stack/.test":    ("Haskell (The Stack) test",     "code", "haskell",    True, [("test",  "test")]),
+
+    # -------------------------------------------------------------------------
+    # Music — Lakh MIDI Dataset (download_music.py)
+    # -------------------------------------------------------------------------
+
+    "dataset/music/midi/classical/.full":  ("LMD Classical (MIDI tokens) full",  "music", "classical", True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/music/midi/classical/.train": ("LMD Classical (MIDI tokens) train", "music", "classical", True, [("train", "train")]),
+    "dataset/music/midi/classical/.valid": ("LMD Classical (MIDI tokens) valid", "music", "classical", True, [("valid", "valid")]),
+    "dataset/music/midi/classical/.test":  ("LMD Classical (MIDI tokens) test",  "music", "classical", True, [("test",  "test")]),
+
+    "dataset/music/midi/folk/.full":       ("LMD Folk (MIDI tokens) full",       "music", "folk",      True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/music/midi/folk/.train":      ("LMD Folk (MIDI tokens) train",      "music", "folk",      True, [("train", "train")]),
+    "dataset/music/midi/folk/.valid":      ("LMD Folk (MIDI tokens) valid",      "music", "folk",      True, [("valid", "valid")]),
+    "dataset/music/midi/folk/.test":       ("LMD Folk (MIDI tokens) test",       "music", "folk",      True, [("test",  "test")]),
+
+    # -------------------------------------------------------------------------
+    # DNA — Human genome GRCh38 (download_dna.py)
+    # -------------------------------------------------------------------------
+
+    "dataset/dna/human/coding/.full":    ("Human Genome (coding) full",    "dna", "human", True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/dna/human/coding/.train":   ("Human Genome (coding) train",   "dna", "human", True, [("train", "train")]),
+    "dataset/dna/human/coding/.valid":   ("Human Genome (coding) valid",   "dna", "human", True, [("valid", "valid")]),
+    "dataset/dna/human/coding/.test":    ("Human Genome (coding) test",    "dna", "human", True, [("test",  "test")]),
+
+    "dataset/dna/human/noncoding/.full":  ("Human Genome (noncoding) full",  "dna", "human", True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/dna/human/noncoding/.train": ("Human Genome (noncoding) train", "dna", "human", True, [("train", "train")]),
+    "dataset/dna/human/noncoding/.valid": ("Human Genome (noncoding) valid", "dna", "human", True, [("valid", "valid")]),
+    "dataset/dna/human/noncoding/.test":  ("Human Genome (noncoding) test",  "dna", "human", True, [("test",  "test")]),
+
+    # -------------------------------------------------------------------------
+    # Protein — UniProt SwissProt (download_protein.py)
+    # -------------------------------------------------------------------------
+
+    "dataset/protein/swissprot/.full":  ("SwissProt (amino acids) full",  "protein", "human", True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/protein/swissprot/.train": ("SwissProt (amino acids) train", "protein", "human", True, [("train", "train")]),
+    "dataset/protein/swissprot/.valid": ("SwissProt (amino acids) valid", "protein", "human", True, [("valid", "valid")]),
+    "dataset/protein/swissprot/.test":  ("SwissProt (amino acids) test",  "protein", "human", True, [("test",  "test")]),
 }
 # fmt: on
 
@@ -241,8 +361,8 @@ class Corpus(object):
     def choose_dataset(self, path):
         if path not in _REGISTRY:
             print("Please check the dataset path supplied. No such path found: " + path)
-            print("Valid paths are listed in the _REGISTRY dict in data.py")
-            sys.exit(0)
+            print("Valid paths are listed in the _REGISTRY dict in src/data/loader.py")
+            sys.exit(1)
 
         label, data_type, language, is_subdir, splits = _REGISTRY[path]
         self.data_type = data_type

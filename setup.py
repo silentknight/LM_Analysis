@@ -1,4 +1,4 @@
-import distutils.sysconfig as ds
+import sysconfig
 
 import numpy
 from Cython.Build import cythonize
@@ -7,7 +7,8 @@ from setuptools import setup
 # Anaconda ships an old compiler_compat/ld that rejects Ubuntu 22.04+ libc,
 # which uses the RELR ELF section format (.relr.dyn) requiring binutils >= 2.26.
 # Strip the -B .../compiler_compat flag so gcc uses the system linker instead.
-_cfg = ds.get_config_vars()
+# sysconfig.get_config_vars() returns the internal dict (mutable, same effect as distutils).
+_cfg = sysconfig.get_config_vars()
 for _key in ("LDSHARED", "BLDSHARED"):
     if _key not in _cfg:
         continue
@@ -27,10 +28,11 @@ for _key in ("LDSHARED", "BLDSHARED"):
 
 setup(
     package_dir={"": "src"},
+    python_requires=">=3.12",
     ext_modules=cythonize(
         "src/analysis/lddcalc.pyx",
         annotate=True,
-        compiler_directives={"language_level": "3"},
+        compiler_directives={"language_level": "3str"},
     ),
     include_dirs=[numpy.get_include()],
 )

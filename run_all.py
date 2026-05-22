@@ -49,6 +49,12 @@ def main():
         metavar="NAME",
         help=f"Tokenizer to apply. Available: {{{', '.join(tok_choices)}}}.",
     )
+    tok.add_argument(
+        "--bpe_model",
+        default=None,
+        metavar="PATH",
+        help="Path to a trained BPE model (.json). Required when --tokenizer bpe.",
+    )
 
     # ── Analysis selection ────────────────────────────────────────────────────
     sel = parser.add_argument_group("analysis selection")
@@ -147,6 +153,11 @@ def main():
         )
 
     # ── Resolve tokenizer and derived settings ────────────────────────────────
+    if args.tokenizer == "bpe":
+        if not args.bpe_model:
+            parser.error("--bpe_model PATH is required when --tokenizer bpe")
+        import data.tokenizers.bpe as _bpe_mod
+        _bpe_mod._model_path = args.bpe_model
     tokenizer = data.get_tokenizer(args.tokenizer)
     log_type = {"e": 0, "2": 1, "10": 2}[args.log_base]
     overlap = 0 if args.no_overlap else 1
@@ -187,8 +198,6 @@ def main():
     corpus_path = os.path.join(exp_dir, "corpus", args.save_path + "_corpus.dat")
     with open(corpus_path, "wb") as f:
         pickle.dump(corpus, f)
-    with open(corpus_path, "rb") as f:
-        _ = pickle.load(f)
 
     print("Corpus loaded")
 
@@ -268,8 +277,11 @@ def main():
             else:
                 print("Compiled src/analysis/scaling_laws.c")
         if os.path.exists(binary):
-            subprocess.run([binary, args.save_path, exp_dir])
-            print("Heaps / Taylor's / Ebeling's computed")
+            result = subprocess.run([binary, args.save_path, exp_dir])
+            if result.returncode != 0:
+                print(f"Warning: scaling_laws exited with code {result.returncode}")
+            else:
+                print("Heaps / Taylor's / Ebeling's computed")
 
     ###########################################################################
     # Recurrence

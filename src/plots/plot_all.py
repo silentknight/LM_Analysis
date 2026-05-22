@@ -3,9 +3,9 @@
 Plot complex-system properties for language modelling datasets.
 
 Examples:
-    python plot_all.py                          # all plot types
-    python plot_all.py --plots zipf ldds        # selected types
-    python plot_all.py --plots taylors --subseq_length 500
+    python plot_all.py --experiments_dir experiments/text/english/word
+    python plot_all.py --experiments_dir experiments/text/english/word --plots zipf ldds
+    python plot_all.py --experiments_dir experiments/text/english/word --plots taylors --subseq_length 500
 """
 import os
 import sys

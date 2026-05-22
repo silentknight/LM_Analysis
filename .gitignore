@@ -27,9 +27,12 @@ old/
 tests/
 dataset/
 experiments/
-baseline/
+baseline/*
+!baseline/validate.py
+!baseline/cmd.txt
 __pycache__/
 *.egg-info/
+docs/
 
 # Virtual environments
 venv/
@@ -52,3 +55,6 @@ setup.cfg
 .DS_Store
 Thumbs.db
 .claude/
+
+# Claude context (local only)
+CLAUDE.md

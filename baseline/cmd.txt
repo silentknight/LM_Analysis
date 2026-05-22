@@ -1,0 +1,1 @@
+python -u run_all.py --data dataset/text/english/ptb/.full --tokenizer word --threads 10 --log_base e --mi_method grassberger --cutoff 100 --clear --save_path ptb_full --processes mi heaps taylors ebelings recurrence --experiments_dir experiments/text/english/word

@@ -61,7 +61,8 @@ def main():
 
         amp, index, covar = fit_powerlaw(xdata, ydata)
         index_err = np.sqrt(covar[1][1]) if covar is not None else float("nan")
-        amp_err = np.sqrt(covar[0][0]) * amp if covar is not None else float("nan")
+        # p[0] = log10(amp), so σ_amp = amp · ln(10) · σ_{p₀} by error propagation
+        amp_err = amp * np.log(10) * np.sqrt(covar[0][0]) if covar is not None else float("nan")
 
         fit_ydata = powerlaw(xdata, amp, index)
         mse = float(np.mean((ydata - fit_ydata) ** 2))

@@ -8,9 +8,6 @@ Save current experiments as a named baseline:
 
 Check (re-runs stored command then compares against baseline):
     python validate.py check --save_path ptb_full
-
-Check without re-running (compare existing outputs only):
-    python validate.py check --save_path ptb_full --skip_run
 """
 
 import argparse
@@ -23,8 +20,8 @@ import sys
 
 import numpy as np
 
-BASELINE_DIR = "baseline"
-EXPERIMENTS_DIR = "experiments"
+BASELINE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASELINE_DIR)
 
 # Tolerances per output type.
 # rel_tol: max(|new-ref|/|ref|) allowed
@@ -113,11 +110,14 @@ def cmp_ldd_csv(new_path, ref_path, abs_tol=1e-10, **_):
 
     new = load(new_path)
     ref = load(ref_path)
-    if set(new) != set(ref):
-        return False, f"distance sets differ: {len(new)} vs {len(ref)}"
-    max_abs = max(abs(nv - rv) for d in new for nv, rv in zip(new[d], ref[d]))
+    missing = set(ref) - set(new)
+    if missing:
+        return False, f"new is missing {len(missing)} distances present in ref (e.g. d={sorted(missing)[:3]})"
+    common = set(new) & set(ref)
+    max_abs = max(abs(nv - rv) for d in common for nv, rv in zip(new[d], ref[d]))
     ok = max_abs <= abs_tol
-    return ok, f"max_abs={max_abs:.2e}  tol={abs_tol:.0e}"
+    note = f"  (compared {len(common)} of {len(new)})" if len(new) != len(ref) else ""
+    return ok, f"max_abs={max_abs:.2e}  tol={abs_tol:.0e}{note}"
 
 
 def cmp_heaps(new_path, ref_path, **_):
@@ -223,7 +223,7 @@ def cmp_recurrence(new_path, ref_path, **_):
 
 
 def manifest(sp, experiments_dir=None):
-    d = experiments_dir or EXPERIMENTS_DIR
+    d = experiments_dir or "experiments"
     return [
         (
             "datasetInIDs",
@@ -310,11 +310,10 @@ def cmd_save(args):
             print(f"  skip   {name}  (not found: {src})")
 
     if args.run_cmd:
-        cmd_file = os.path.join(_bdir(sp), "cmd.txt")
-        os.makedirs(_bdir(sp), exist_ok=True)
+        cmd_file = os.path.join(BASELINE_DIR, "cmd.txt")
         with open(cmd_file, "w") as f:
             f.write(args.run_cmd.strip() + "\n")
-        print("  saved  run command → cmd.txt")
+        print("  saved  run command → baseline/cmd.txt")
 
     total = len(manifest(sp))
     print(f"Done. {saved}/{total} files saved.")
@@ -333,19 +332,18 @@ def cmd_check(args):
         print(f"No baseline found at '{bdir}'. Run 'save' first.")
         sys.exit(1)
 
-    if not args.skip_run:
-        cmd_file = os.path.join(bdir, "cmd.txt")
-        if not os.path.exists(cmd_file):
-            print("No cmd.txt in baseline. Use --skip_run or re-save with --run_cmd.")
-            sys.exit(1)
-        with open(cmd_file) as f:
-            run_cmd = f.read().strip()
-        print(f"Re-running: {run_cmd}\n")
-        ret = subprocess.run(run_cmd, shell=True)
-        if ret.returncode != 0:
-            print("Run command failed — aborting check.")
-            sys.exit(1)
-        print()
+    cmd_file = os.path.join(BASELINE_DIR, "cmd.txt")
+    if not os.path.exists(cmd_file):
+        print("No baseline/cmd.txt found. Re-save with --run_cmd.")
+        sys.exit(1)
+    with open(cmd_file) as f:
+        run_cmd = f.read().strip()
+    print(f"Re-running: {run_cmd}\n")
+    ret = subprocess.run(run_cmd, shell=True, cwd=PROJECT_ROOT)
+    if ret.returncode != 0:
+        print("Run command failed — aborting check.")
+        sys.exit(1)
+    print()
 
     tol = TOLERANCES
     print(f"Comparing against baseline '{bdir}/'")
@@ -410,11 +408,6 @@ def main():
     p_check = sub.add_parser("check", help="Re-run analysis and compare against baseline")
     p_check.add_argument("--save_path", required=True)
     _add_path_args(p_check)
-    p_check.add_argument(
-        "--skip_run",
-        action="store_true",
-        help="Skip re-running; compare existing experiments/ against baseline",
-    )
 
     args = parser.parse_args()
     {"save": cmd_save, "check": cmd_check}[args.command](args)

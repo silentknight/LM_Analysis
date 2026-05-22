@@ -39,6 +39,9 @@ def _mi_worker(
             q.put((d, None, None, None, None))
             return
 
+        # log_base_val: divisor to convert nats → target unit (1.0 for nats, ln2 for bits, ln10 for hartleys)
+        log_base_val = (1.0, np.log(2), np.log(10))[log_type]
+
         if log_type == 0:
             log_fn = np.log
         elif log_type == 1:
@@ -47,12 +50,14 @@ def _mi_worker(
             log_fn = np.log10
 
         if method == "grassberger":
+            # Grassberger (1988) estimator: H = log(N) - (1/N)·Σ nᵢ·ψ(nᵢ)
+            # ψ (digamma) is always in nats; compute fully in nats then convert.
             sum_X = np.sum(Ni_X)
             sum_Y = np.sum(Ni_Y)
             sum_XY = np.sum(Ni_XY)
-            Hx = log_fn(sum_X) - np.sum(Ni_X * spec.digamma(Ni_X)) / sum_X
-            Hy = log_fn(sum_Y) - np.sum(Ni_Y * spec.digamma(Ni_Y)) / sum_Y
-            Hxy = log_fn(sum_XY) - np.sum(Ni_XY * spec.digamma(Ni_XY)) / sum_XY
+            Hx = (np.log(sum_X) - np.sum(Ni_X * spec.digamma(Ni_X)) / sum_X) / log_base_val
+            Hy = (np.log(sum_Y) - np.sum(Ni_Y * spec.digamma(Ni_Y)) / sum_Y) / log_base_val
+            Hxy = (np.log(sum_XY) - np.sum(Ni_XY * spec.digamma(Ni_XY)) / sum_XY) / log_base_val
             mi_val = Hx + Hy - Hxy
         elif method == "standard":
             px = Ni_X / np.sum(Ni_X)
@@ -214,34 +219,38 @@ class MutualInformation(object):
                                 res = q.get(timeout=600)
                             except Exception:
                                 end = True
+                                for p in procs:
+                                    if p.is_alive():
+                                        p.terminate()
                                 break
                             results[res[0]] = res[1:]  # keyed by distance
 
                         for p in procs:
-                            p.join()
+                            p.join(timeout=5)
+                            if p.is_alive():
+                                p.kill()
+                                p.join()
 
                         # Process results in ascending distance order
                         for i in range(self.no_of_threads):
                             if d + i > self.cutoff:
                                 threads_remaining = self.no_of_threads - i
-                                for _ in range(threads_remaining):
-                                    if mi and mi[-1] == 0.0:
-                                        del mi[-1]
-                                        del Hx[-1]
-                                        del Hy[-1]
-                                        del Hxy[-1]
+                                if threads_remaining > 0:
+                                    del mi[-threads_remaining:]
+                                    del Hx[-threads_remaining:]
+                                    del Hy[-threads_remaining:]
+                                    del Hxy[-threads_remaining:]
                                 end = True
                                 break
                             res = results.get(d + i, (None, None, None, None))
                             if res[0] is None or np.isnan(res[0]):
                                 end = True
                                 threads_remaining = self.no_of_threads - i
-                                for _ in range(threads_remaining):
-                                    if mi and mi[-1] == 0.0:
-                                        del mi[-1]
-                                        del Hx[-1]
-                                        del Hy[-1]
-                                        del Hxy[-1]
+                                if threads_remaining > 0:
+                                    del mi[-threads_remaining:]
+                                    del Hx[-threads_remaining:]
+                                    del Hy[-threads_remaining:]
+                                    del Hxy[-threads_remaining:]
                                 break
 
                             mi[d + i - 1] = res[0]

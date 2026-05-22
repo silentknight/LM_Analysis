@@ -25,7 +25,7 @@ class Recurrence(object):
         self.position_index = [np.empty(0, dtype=np.uint64) for _ in range(self.uniqueSize)]
         for word_id, group in zip(unique_ids, groups):
             if word_id < self.uniqueSize:
-                self.position_index[word_id] = np.sort(group).astype(np.uint64)
+                self.position_index[word_id] = group.astype(np.uint64)
 
         self.recurrenceList = self.getRecurrence()
 
