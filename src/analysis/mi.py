@@ -6,10 +6,10 @@ from multiprocessing import Process, Queue
 from multiprocessing.shared_memory import SharedMemory
 
 import numpy as np
-import scipy.special as spec
 from tqdm import tqdm
 
 from . import lddcalc  # type: ignore[attr-defined]
+from .entropy_estimators import get_estimator
 
 
 def _mi_worker(
@@ -42,37 +42,17 @@ def _mi_worker(
         # log_base_val: divisor to convert nats → target unit (1.0 for nats, ln2 for bits, ln10 for hartleys)
         log_base_val = (1.0, np.log(2), np.log(10))[log_type]
 
-        if log_type == 0:
-            log_fn = np.log
-        elif log_type == 1:
-            log_fn = np.log2
-        else:
-            log_fn = np.log10
-
-        if method == "grassberger":
-            # Grassberger (1988) estimator: H = log(N) - (1/N)·Σ nᵢ·ψ(nᵢ)
-            # ψ (digamma) is always in nats; compute fully in nats then convert.
-            sum_X = np.sum(Ni_X)
-            sum_Y = np.sum(Ni_Y)
-            sum_XY = np.sum(Ni_XY)
-            Hx = (np.log(sum_X) - np.sum(Ni_X * spec.digamma(Ni_X)) / sum_X) / log_base_val
-            Hy = (np.log(sum_Y) - np.sum(Ni_Y * spec.digamma(Ni_Y)) / sum_Y) / log_base_val
-            Hxy = (np.log(sum_XY) - np.sum(Ni_XY * spec.digamma(Ni_XY)) / sum_XY) / log_base_val
-            mi_val = Hx + Hy - Hxy
-        elif method == "standard":
-            px = Ni_X / np.sum(Ni_X)
-            py = Ni_Y / np.sum(Ni_Y)
-            pxy = Ni_XY / np.sum(Ni_XY)
-            Hx = -np.sum(px * log_fn(px))
-            Hy = -np.sum(py * log_fn(py))
-            Hxy = -np.sum(pxy * log_fn(pxy))
-            mi_val = Hx + Hy - Hxy
-        else:
-            q.put((d, None, None, None, None))
-            return
+        estimator = get_estimator(method)
+        Hx = estimator.entropy(Ni_X, log_base_val)
+        Hy = estimator.entropy(Ni_Y, log_base_val)
+        Hxy = estimator.entropy(Ni_XY, log_base_val)
+        mi_val = Hx + Hy - Hxy
 
         q.put((d, float(mi_val), float(Hx), float(Hy), float(Hxy)))
-    except Exception:
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        print(f"MI worker failed at d={d}: {exc}")
         q.put((d, None, None, None, None))
     finally:
         shm.close()
@@ -98,6 +78,8 @@ class MutualInformation(object):
         self.method = method
         self.log_type = log_type
         self.cutoff = cutoff
+
+        get_estimator(method)  # validates method name before spawning any workers
 
         # Copy corpus into shared memory once; worker processes attach zero-copy.
         corpus_np = np.array(corpusData.sequentialData.dataArray, dtype=np.uint64)

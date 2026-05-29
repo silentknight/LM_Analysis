@@ -141,6 +141,12 @@ _REGISTRY = {
     "dataset/text/english/openweb/.valid": ("OpenWebText valid", "text", "english", True, [("valid", "valid")]),
     "dataset/text/english/openweb/.test":  ("OpenWebText test",  "text", "english", True, [("test",  "test")]),
 
+    # PG-19 (Project Gutenberg books, Rae et al. 2020)
+    "dataset/text/english/pg19/.full":  ("PG-19 full",  "text", "english", True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
+    "dataset/text/english/pg19/.train": ("PG-19 train", "text", "english", True, [("train", "train")]),
+    "dataset/text/english/pg19/.valid": ("PG-19 valid", "text", "english", True, [("valid", "valid")]),
+    "dataset/text/english/pg19/.test":  ("PG-19 test",  "text", "english", True, [("test",  "test")]),
+
     # English Wikipedia
     "dataset/text/english/wikipedia/.full":  ("Wikipedia full",  "text", "english", True, [("train", "train"), ("valid", "valid"), ("test", "test")]),
     "dataset/text/english/wikipedia/.train": ("Wikipedia train", "text", "english", True, [("train", "train")]),

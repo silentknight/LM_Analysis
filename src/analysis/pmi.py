@@ -9,6 +9,11 @@ import scipy.sparse as sp
 from tqdm import tqdm
 
 from . import lddcalc  # type: ignore[attr-defined]
+from .entropy_estimators import ESTIMATOR_NAMES, get_estimator
+
+# These estimators correct global entropy bias but do not alter per-symbol probability
+# estimates, so PMI values are identical to "standard" for them.
+_PMI_MLE_EQUIVALENT = {"standard", "miller_madow", "grassberger", "grassberger_2003", "nsb"}
 
 
 class MyThread(threading.Thread):
@@ -30,6 +35,15 @@ class MyThread(threading.Thread):
         super(MyThread, self).__init__()
 
     def run(self):
+        try:
+            self._run()
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            print(f"PMI thread failed at d={self.d}: {exc}")
+            self.complete = True  # prevents the outer loop from treating this as a valid result
+
+    def _run(self):
         Ni_X, Ni_Y, Ni_XY, self.Xi, self.Yi = lddcalc.getJointRV(
             self.data_array,
             self.line_length_list,
@@ -42,32 +56,34 @@ class MyThread(threading.Thread):
             self.complete = True
             return
 
-        if self.method == "standard":
-            P_XY = Ni_XY / np.sum(Ni_XY)
-            # getStandardPMI indexes px/py using raw vocab IDs (P_XY.row / P_XY.col),
-            # so P_X and P_Y must be vocab-ID-indexed arrays of length max_vocab_id+1.
-            # self.Xi/self.Yi are unique_X/unique_Y (sorted vocab IDs from getJointRV).
-            # Fancy indexing builds the correct layout without sparse matrices.
-            P_X = np.zeros(int(self.Xi[-1]) + 1, dtype=np.float64)
-            P_X[self.Xi] = Ni_X / np.sum(Ni_X)
-            P_Y = np.zeros(int(self.Yi[-1]) + 1, dtype=np.float64)
-            P_Y[self.Yi] = Ni_Y / np.sum(Ni_Y)
-            P_XY = P_XY.tocoo()
-            pmi_data = lddcalc.getStandardPMI(
-                P_XY.data,
-                np.uint64(P_XY.row),
-                np.uint64(P_XY.col),
-                P_X,
-                P_Y,
-                np.uint64(P_XY.data.size),
-                np.uint64(P_X.size),
-                np.uint64(P_Y.size),
-                self.log_type,
-            )
-            self.pmi = sp.coo_matrix((pmi_data, (P_XY.row, P_XY.col)), shape=P_XY.shape).tocsc()
-            self.Ni_X = Ni_X
-            self.Ni_Y = Ni_Y
-            self.Ni_XY = Ni_XY
+        estimator = get_estimator(self.method)
+
+        # getStandardPMI indexes P_X/P_Y by raw vocab ID, so build vocab-length arrays.
+        Xi = self.Xi.astype(np.int64)
+        Yi = self.Yi.astype(np.int64)
+        P_X = np.zeros(int(Xi[-1]) + 1, dtype=np.float64)
+        P_X[Xi] = estimator.probabilities(Ni_X)
+        P_Y = np.zeros(int(Yi[-1]) + 1, dtype=np.float64)
+        P_Y[Yi] = estimator.probabilities(Ni_Y)
+
+        P_XY_coo = Ni_XY.tocoo()
+        p_xy_data = estimator.probabilities(P_XY_coo.data)
+
+        pmi_data = lddcalc.getStandardPMI(
+            p_xy_data,
+            np.uint64(P_XY_coo.row),
+            np.uint64(P_XY_coo.col),
+            P_X,
+            P_Y,
+            np.uint64(p_xy_data.size),
+            np.uint64(P_X.size),
+            np.uint64(P_Y.size),
+            self.log_type,
+        )
+        self.pmi = sp.coo_matrix((pmi_data, (P_XY_coo.row, P_XY_coo.col)), shape=P_XY_coo.shape).tocsc()
+        self.Ni_X = Ni_X
+        self.Ni_Y = Ni_Y
+        self.Ni_XY = Ni_XY
 
 
 class PointwiseMutualInformation(object):
@@ -82,7 +98,7 @@ class PointwiseMutualInformation(object):
         cutoff,
     ):
         self.corpus = corpusData
-        self.data_array = array.array("L", corpusData.sequentialData.dataArray)
+        self.data_array = array.array("Q", corpusData.sequentialData.dataArray)
         self.line_length_list = np.array(corpusData.sequentialData.wordCountList, dtype=np.uint64)
         self.total_length = corpusData.sequentialData.totalLength
         self.no_of_threads = no_of_threads
@@ -91,8 +107,13 @@ class PointwiseMutualInformation(object):
         self.method = method
         self.log_type = log_type
         self.cutoff = cutoff
-        if method not in ("standard",):
-            raise ValueError(f"Unknown PMI method: {method!r}")
+        if method not in ESTIMATOR_NAMES:
+            raise ValueError(f"Unknown PMI method: {method!r}. Choose from: {ESTIMATOR_NAMES}")
+        if method in _PMI_MLE_EQUIVALENT and method != "standard":
+            print(
+                f"Note: --mi_method {method!r} corrects entropy bias but not per-symbol "
+                "probabilities. PMI values will be identical to 'standard'."
+            )
         self.pointwiseMutualInformation = self.calculate_PMI()
 
     def calculate_PMI(self):

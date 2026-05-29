@@ -4,7 +4,7 @@ A toolkit for measuring complex system properties of language modeling datasets.
 
 ## Analyses
 
-- **Long-range Dependencies (LDDs)** — Mutual information between tokens at distance *d*, using standard or Grassberger entropy estimation
+- **Long-range Dependencies (LDDs)** — Mutual information between tokens at distance *d*, with six selectable entropy estimators
 - **Pointwise Mutual Information (PMI)** — Token-pair PMI matrices across distances
 - **Zipf's Law** — Rank-frequency distribution of the vocabulary
 - **Heap's Law** — Vocabulary growth as a function of corpus size
@@ -24,12 +24,13 @@ A toolkit for measuring complex system properties of language modeling datasets.
     │   └── loader.py
     │
     ├── analysis/        # Computation modules
-    │   ├── mi.py        # LDD / MI computation (threaded)
-    │   ├── pmi.py       # PMI computation (threaded)
+    │   ├── mi.py                  # LDD / MI computation (multiprocessing)
+    │   ├── pmi.py                 # PMI computation (threaded)
+    │   ├── entropy_estimators.py  # Pluggable entropy estimator classes (shared by MI and PMI)
     │   ├── recurrence.py
-    │   ├── process_zipf.py  # Reorder Zipf arrays to match train word rank
-    │   ├── speedup.pyx  # Cython extension for fast joint RV computation
-    │   └── scaling_laws.c       # C implementation of Heap's / Taylor's / Ebeling's laws
+    │   ├── process_zipf.py        # Reorder Zipf arrays to match train word rank
+    │   ├── lddcalc.pyx            # Cython extension for fast joint count extraction
+    │   └── scaling_laws.c         # C implementation of Heap's / Taylor's / Ebeling's laws
     │
     ├── utils/           # Shared utilities
     │   ├── loaders.py   # Loaders for experiment output files (npz, csv)
@@ -87,12 +88,25 @@ python -u run_all.py --data dataset/text/english/ptb/.full \
 | `--save_path` | Stem for all output filenames | **required** |
 | `--tokenizer` | Tokenizer: `word`, `char`, … (extensible) | `word` |
 | `--cutoff` | Maximum distance *d* for MI / PMI | `1000` |
-| `--mi_method` | Entropy estimator: `grassberger` or `standard` | `grassberger` |
+| `--mi_method` | Entropy estimator (see table below) | `grassberger` |
 | `--log_base` | Log base for MI / PMI values: `e`, `2`, or `10` | `2` |
 | `--threads` | Parallel workers | `1` |
 | `--no_overlap` | Disallow overlapping token windows (flag) | off |
 | `--clear` | Delete existing LDD file before MI (flag) | off |
 | `--processes` | Analyses to run: `mi pmi heaps taylors ebelings recurrence` (`heaps`/`taylors`/`ebelings` share one C binary) | `mi heaps taylors ebelings recurrence` |
+
+### Entropy estimators
+
+The `--mi_method` flag selects the entropy estimator used for both MI (LDDs) and PMI. All estimators compute `MI = H(X) + H(Y) − H(X,Y)`; they differ in how each marginal entropy is estimated from finite counts.
+
+| Method | Description | Best for |
+|---|---|---|
+| `standard` | MLE: `−Σ pᵢ log pᵢ`. Biased downward by `(S−1)/(2N)`. | Large corpora, fast baseline |
+| `miller_madow` | MLE + `(S̃−1)/(2N)` additive correction (Miller 1955). | Same cost as standard, slight improvement |
+| `grassberger` | Replaces `log(nᵢ)` with `ψ(nᵢ)` (digamma), correcting singleton bias (Grassberger 1988). | General use; default |
+| `grassberger_2003` | Adds parity correction `(−1)^n / (n(n+1))` to ψ(n), removing even/odd artifacts at small counts (Grassberger 2003). | Improvement over `grassberger` at low counts |
+| `chao_shen` | Good-Turing coverage `C = 1−f₁/N` adjusts probabilities; Horvitz-Thompson denominator accounts for unseen events (Chao & Shen 2003). For PMI, coverage-adjusted probabilities are used directly. | Large distances where unseen pairs dominate |
+| `nsb` | Bayesian estimator via numerical integration over Dirichlet prior (Nemenman, Shafee & Bialek 2002). Requires `pip install ndd`. | Severely undersampled distributions |
 
 **Run a subset of analyses:**
 

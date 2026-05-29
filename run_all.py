@@ -85,8 +85,8 @@ def main():
     mi_grp.add_argument(
         "--mi_method",
         default="grassberger",
-        choices=["grassberger", "standard"],
-        help="Entropy estimator used for MI.",
+        choices=["standard", "miller_madow", "grassberger", "grassberger_2003", "chao_shen", "nsb"],
+        help="Entropy estimator used for MI (nsb requires: pip install ndd).",
     )
     mi_grp.add_argument(
         "--log_base",
@@ -253,7 +253,7 @@ def main():
             args.threads,
             pmi_dir,
             overlap,
-            "standard",
+            args.mi_method,
             args.cutoff,
         )
         print("PMI computed")

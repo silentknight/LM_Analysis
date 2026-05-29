@@ -17,7 +17,7 @@ def _extract_pairs(dataArray, unsigned long[:] lineLengthList, int totalLength, 
         data_np = np.frombuffer(dataArray, dtype=np.uint64)
 
     if overlap == 1:
-        if totalLength // d <= 1:
+        if totalLength <= d:
             return None, None
         return data_np[:totalLength - d], data_np[d:totalLength]
     else:
@@ -25,7 +25,7 @@ def _extract_pairs(dataArray, unsigned long[:] lineLengthList, int totalLength, 
         y_parts = []
         for i in range(nLines):
             line_len = lineLengthList[i]
-            if line_len // d > 1:
+            if line_len > d:
                 x_parts.append(data_np[index:index + line_len - d])
                 y_parts.append(data_np[index + d:index + line_len])
             index += line_len

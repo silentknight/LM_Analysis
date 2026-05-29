@@ -114,6 +114,8 @@ def cmp_ldd_csv(new_path, ref_path, abs_tol=1e-10, **_):
     if missing:
         return False, f"new is missing {len(missing)} distances present in ref (e.g. d={sorted(missing)[:3]})"
     common = set(new) & set(ref)
+    if not common:
+        return False, "no common distances to compare (baseline may be empty)"
     max_abs = max(abs(nv - rv) for d in common for nv, rv in zip(new[d], ref[d]))
     ok = max_abs <= abs_tol
     note = f"  (compared {len(common)} of {len(new)})" if len(new) != len(ref) else ""

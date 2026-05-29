@@ -44,6 +44,16 @@ music = [
     "pretty_midi>=0.2",
 ]
 
+# NSB entropy estimator (--mi_method nsb)
+nsb = [
+    "ndd>=1.0",
+]
+
+# Broken power-law fitting (pilot study, paper analysis)
+fitting = [
+    "astropy>=5.0",
+]
+
 # Development tools
 dev = [
     "black>=24.0",
@@ -54,7 +64,7 @@ dev = [
 
 # Everything at once
 all = [
-    "lm-analysis[plots,datasets,bpe,music]",
+    "lm-analysis[plots,datasets,bpe,music,nsb,fitting]",
 ]
 
 # ---------------------------------------------------------------------------
