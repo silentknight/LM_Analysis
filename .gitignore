@@ -34,6 +34,10 @@ __pycache__/
 *.egg-info/
 docs/
 
+# Papers with their own Overleaf remotes — do not track from here, or
+# LM_Analysis will treat them as embedded repos and pushes get confusing.
+papers/
+
 # Virtual environments
 venv/
 .venv/
