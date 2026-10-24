@@ -85,7 +85,7 @@ def main():
     mi_grp.add_argument(
         "--mi_method",
         default="grassberger",
-        choices=["standard", "miller_madow", "grassberger", "grassberger_2003", "chao_shen", "nsb"],
+        choices=["standard", "miller_madow", "grassberger", "grassberger_alt", "chao_shen", "nsb"],
         help="Entropy estimator used for MI (nsb requires: pip install ndd).",
     )
     mi_grp.add_argument(

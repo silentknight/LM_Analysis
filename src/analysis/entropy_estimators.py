@@ -37,8 +37,8 @@ class GrassbergerEstimator(BaseEstimator):
         return (np.log(N) - np.sum(counts * spec.digamma(counts)) / N) / log_base_val
 
 
-class Grassberger2003Estimator(BaseEstimator):
-    """Grassberger (2003): G(n) = ψ(n) + (-1)^n/(n(n+1)) removes parity artifacts."""
+class GrassbergerAltEstimator(BaseEstimator):
+    """Grassberger (1988) Eq. 13: ψ(n) + (-1)^n/(n(n+1)) removes parity artifacts."""
 
     @staticmethod
     def _g(c):
@@ -89,16 +89,21 @@ _REGISTRY: dict[str, type[BaseEstimator]] = {
     "standard":         StandardEstimator,
     "miller_madow":     MillerMadowEstimator,
     "grassberger":      GrassbergerEstimator,
-    "grassberger_2003": Grassberger2003Estimator,
+    "grassberger_alt":  GrassbergerAltEstimator,
     "chao_shen":        ChaoShenEstimator,
     "nsb":              NSBEstimator,
 }
 # fmt: on
 
+# Kept because experiment directories on disk are named after the old key; the
+# estimator is Grassberger 1988 Eq. 13, not the 2003 integral form.
+_ALIASES = {"grassberger_2003": "grassberger_alt"}
+
 ESTIMATOR_NAMES = list(_REGISTRY)
 
 
 def get_estimator(name: str) -> BaseEstimator:
+    name = _ALIASES.get(name, name)
     if name not in _REGISTRY:
         raise ValueError(f"Unknown estimator {name!r}. Choose from: {ESTIMATOR_NAMES}")
     return _REGISTRY[name]()

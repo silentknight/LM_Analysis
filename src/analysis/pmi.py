@@ -13,7 +13,7 @@ from .entropy_estimators import ESTIMATOR_NAMES, get_estimator
 
 # These estimators correct global entropy bias but do not alter per-symbol probability
 # estimates, so PMI values are identical to "standard" for them.
-_PMI_MLE_EQUIVALENT = {"standard", "miller_madow", "grassberger", "grassberger_2003", "nsb"}
+_PMI_MLE_EQUIVALENT = {"standard", "miller_madow", "grassberger", "grassberger_alt", "nsb"}
 
 
 class MyThread(threading.Thread):

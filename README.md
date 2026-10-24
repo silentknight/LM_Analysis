@@ -104,7 +104,7 @@ The `--mi_method` flag selects the entropy estimator used for both MI (LDDs) and
 | `standard` | MLE: `−Σ pᵢ log pᵢ`. Biased downward by `(S−1)/(2N)`. | Large corpora, fast baseline |
 | `miller_madow` | MLE + `(S̃−1)/(2N)` additive correction (Miller 1955). | Same cost as standard, slight improvement |
 | `grassberger` | Replaces `log(nᵢ)` with `ψ(nᵢ)` (digamma), correcting singleton bias (Grassberger 1988). | General use; default |
-| `grassberger_2003` | Adds parity correction `(−1)^n / (n(n+1))` to ψ(n), removing even/odd artifacts at small counts (Grassberger 2003). | Improvement over `grassberger` at low counts |
+| `grassberger_alt` | Adds parity correction `(−1)^n / (n(n+1))` to ψ(n), removing even/odd artifacts at small counts (Grassberger 1988, Eq. 13; `grassberger_2003` is accepted as a deprecated alias). | Improvement over `grassberger` at low counts |
 | `chao_shen` | Good-Turing coverage `C = 1−f₁/N` adjusts probabilities; Horvitz-Thompson denominator accounts for unseen events (Chao & Shen 2003). For PMI, coverage-adjusted probabilities are used directly. | Large distances where unseen pairs dominate |
 | `nsb` | Bayesian estimator via numerical integration over Dirichlet prior (Nemenman, Shafee & Bialek 2002). Requires `pip install ndd`. | Severely undersampled distributions |
 
