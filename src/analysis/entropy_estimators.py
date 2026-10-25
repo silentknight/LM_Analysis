@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
+from decimal import Decimal as D
+from math import ceil, log
 
 import numpy as np
 import scipy.special as spec
+
+from .polyapprox import best_poly
 
 
 class BaseEstimator(ABC):
@@ -69,6 +73,58 @@ class ChaoShenEstimator(BaseEstimator):
         return -np.sum(p_hat / ht_denom * np.log(p_hat)) / log_base_val
 
 
+class JVHWEstimator(BaseEstimator):
+    """Jiao et al. (2015) / Wu and Yang (2016): unbiased estimator of the best
+    polynomial approximation to -p*ln(p) where the functional is non-smooth, and
+    a bias-corrected plug-in elsewhere. Attains the n ~ S/ln(S) minimax rate.
+
+    The constant term of the approximation is fixed at zero, so unobserved cells
+    contribute nothing and the alphabet size need not be supplied.
+    """
+
+    def __init__(self, c1: float = 1.6, c2: float = 1.2):
+        self.c1, self.c2 = c1, c2
+
+    def entropy(self, counts, log_base_val):
+        counts = np.asarray(counts)
+        N = int(np.sum(counts))
+        if N <= 1:
+            return 0.0
+        # Symbols with p_hat <= delta take the polynomial branch; the
+        # approximation is built on [0, 2*delta] so that those symbols sit in the
+        # interior of its domain. Classifying at the domain edge instead puts the
+        # bulk of a well-sampled alphabet exactly where the branch is worst, and
+        # drives the estimate far below the truth.
+        delta = min(self.c1 * log(N) / N, 0.5)
+        thresh = 2.0 * delta
+        m_max = int(delta * N)
+        # The unbiased estimator of p^k uses the falling factorial (m)_k, whose
+        # variance explodes once k approaches the largest count in the branch.
+        K = min(4 + ceil(self.c2 * log(N)), 22, max(m_max, 1))
+        c, _ = best_poly(K)
+
+        # a_k on [0, thresh] from the coefficients on [0, 1]
+        t, n = D(repr(thresh)), D(N)
+        a = [c[k - 1] * t ** (1 - k) for k in range(1, K + 1)]
+        a[0] -= t.ln()
+
+        small = counts <= m_max
+        total = D(0)
+        if np.any(small):
+            vals, reps = np.unique(counts[small], return_counts=True)
+            for m, rep in zip(vals.astype(np.int64).tolist(), reps.tolist()):
+                acc, ff = D(0), D(1)
+                for k in range(1, min(K, m) + 1):
+                    ff *= D(m - k + 1) / n
+                    acc += a[k - 1] * ff
+                total += acc * D(rep)
+        H = float(total)
+        if np.any(~small):
+            p = counts[~small] / N
+            H += float(np.sum(-p * np.log(p) + 1.0 / (2 * N)))
+        return H / log_base_val
+
+
 class NSBEstimator(BaseEstimator):
     """Nemenman-Shafee-Bialek Bayesian estimator. Requires: pip install ndd."""
 
@@ -91,6 +147,7 @@ _REGISTRY: dict[str, type[BaseEstimator]] = {
     "grassberger":      GrassbergerEstimator,
     "grassberger_alt":  GrassbergerAltEstimator,
     "chao_shen":        ChaoShenEstimator,
+    "jvhw":             JVHWEstimator,
     "nsb":              NSBEstimator,
 }
 # fmt: on
